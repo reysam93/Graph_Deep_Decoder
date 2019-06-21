@@ -10,9 +10,10 @@ class GraphDeepDecoder():
                         hier_A, 
                         n_clust,
                         up_method='weighted',
-                        n_channels=[5]*3,
+                        n_channels=[4]*3,
                         act_fun=nn.ReLU(),
-                        last_act_fun=nn.Sigmoid(),
+                        last_act_fun=nn.Tanh(),#nn.Sigmoid(),
+                        batch_norm=True,
                         upsampling=True):
         # BUG: check dimmensions --> carefull if A is not used
         # assert(len(descendance)==len(hier_A)-1==len(n_clust)-1==len(n_channels))
@@ -25,6 +26,7 @@ class GraphDeepDecoder():
         self.last_act_fun = last_act_fun
         self.n_clust = n_clust
         self.up_method = up_method
+        self.batch_norm = batch_norm
         self.upsampling = upsampling
         if self.upsampling:
             shape = [1, self.n_channels[0], self.n_clust[0]]
@@ -46,6 +48,7 @@ class GraphDeepDecoder():
               
             if self.act_fun != None:
                 self.add_layer(self.act_fun)
+            if self.batch_norm:    
                 self.add_layer(nn.BatchNorm1d(self.n_channels[l+1]))
             
 
@@ -62,7 +65,6 @@ class GraphDeepDecoder():
     def fit(self, signal, n_iter=2000):
         p = [x for x in self.model.parameters() ]
 
-        # torch.optim.Adam(p, lr=0.01)
         optimizer = torch.optim.Adam(p, lr=0.01)
         mse = torch.nn.MSELoss()
         
@@ -94,6 +96,8 @@ class GraphDeepDecoder():
         print("BEST MSE: ", best_mse)
         return self.model(self.input).detach().numpy(), best_mse
 
+    def count_params(self):
+        return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
 """
 Use information from the agglomerative hierarchical clustering for doing the upsampling by
 creating the upsampling matrix U
