@@ -77,6 +77,9 @@ class DifussedSparseGraphSignal():
     def normalize(self):
         self.x = (self.x - np.mean(self.x))/np.std(self.x)
 
+    def to_unit_norm(self):
+        self.x = self.x/np.linalg.norm(self.x)
+
 # NOTE: maybe should use inheritance instead of selecting the 'algorithm'?
 # NOTE: maybe descendance and hier_A should boh be lists, no dictionaries
 # NOTE: maybe a static member as a factory method (@staticmethod and without self) 
