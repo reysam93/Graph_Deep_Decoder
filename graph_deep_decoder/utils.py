@@ -88,7 +88,8 @@ class DifussedSparseGraphSignal():
 class MultiRessGraphClustering():
     def __init__(self, G, n_clust, algorithm, method='maxclust', link_fun='average'):
         self.G = G
-        self.clusters_size = n_clust
+        # self.clusters_size = n_clust
+        self.clusters_size = []
         self.cluster_alg = getattr(self, algorithm)
         self.clust_method = method
         self.link_fun = link_fun
@@ -96,12 +97,15 @@ class MultiRessGraphClustering():
         self.Z = None
         self.descendance = {}
         self.hier_A = []
+        self.cluster_alg(G)
 
-        for cluster in self.clusters_size[:-1]:
-            self.cluster_alg(G)
+        for cluster in n_clust[:-1]:  # cluster is t  
+            # for mthod maxclust
             level_labels = fcluster(self.Z, cluster, criterion=self.clust_method)
             self.labels.append(level_labels)
+            self.clusters_size.append(np.unique(level_labels).size)
         self.labels.append(np.arange(1,G.W.shape[0]+1))
+        self.clusters_size.append(G.W.shape[0])
 
     def distance_clustering(self, G):
         D = dijkstra(G.W)
@@ -157,6 +161,14 @@ class MultiRessGraphClustering():
                         self.hier_A[i][j,k] = np.sum(sub_A)/(len(nodes_c1)*len(nodes_c2))
                         self.hier_A[i][k,j] = self.hier_A[i][j,k]
         return self.hier_A
+
+    def plot_labels(self):
+        n_labels = len(self.labels)-1
+        _, axes= plt.subplots(1, n_labels)
+        self.G.set_coordinates()
+        for i in range(n_labels):
+            self.G.plot_signal(self.labels[i], ax=axes[i])
+        plt.show()
 
     def plot_hier_A(self):
         _, axes = plt.subplots(2, len(self.hier_A))
