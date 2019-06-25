@@ -19,10 +19,9 @@ import torch.nn as nn
 # Tuning parameters
 n_signals = 50
 L = 5
-n_p = 0.0 # SNR = 1/n_p
+n_p = 0.1 # SNR = 1/n_p
 batch_norm = True #True
 up_method = 'weighted'
-upsampling = True
 t = [4, 16, 64, 256] # Max clusters
 #t = [1, 0.75, 0.5, 0] # relative max distances
 c_method = 'maxclust' # 'maxclust' or 'distance'
@@ -42,10 +41,11 @@ CLUST_ALGS = [['spectral_clutering', 'single'],
 N_SCENARIOS = len(CLUST_ALGS)
 
 
-def compute_clusters():
+def compute_clusters(k):
     sizes = []
     descendances = []
     hier_As = []
+    max_dists = []
     for i in range(N_SCENARIOS):
         alg = CLUST_ALGS[i][0]
         link = CLUST_ALGS[i][1]
@@ -54,13 +54,8 @@ def compute_clusters():
         sizes.append(cluster.clusters_size)
         descendances.append(cluster.compute_hierarchy_descendance())
         hier_As.append(cluster.compute_hierarchy_A(up_method))
-        
-        print(alg, ':', link)
-        print(cluster.clusters_size)
-        #cluster.plot_dendrogram()
-        #cluster.plot_labels()
-    #print(np.sort(cluster.Z[:,2]))
-    return sizes, descendances, hier_As
+        max_dists.append(cluster.Z[:,2][-k]/cluster.Z[:,2][-1])
+    return sizes, descendances, hier_As, max_dists
 
 def test_clustering(x, sizes, descendances, hier_As):
     mse_est = np.zeros(N_SCENARIOS)
@@ -69,8 +64,8 @@ def test_clustering(x, sizes, descendances, hier_As):
 
     for i in range(N_SCENARIOS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
-                        n_channels=n_chans, up_method=up_method, batch_norm=batch_norm,
-                        upsampling=upsampling, last_act_fun=last_act_fun)
+                        n_channels=n_chans, upsampling=up_method, batch_norm=batch_norm,
+                        last_act_fun=last_act_fun)
 
         dec.build_network()
         x_est, mse_fit[i] = dec.fit(x_n)
@@ -78,11 +73,11 @@ def test_clustering(x, sizes, descendances, hier_As):
     mse_fit = mse_fit/np.linalg.norm(x_n)
     return mse_est, mse_fit
 
-def print_results(mean_mse, mean_mse_fit, clust_sizes):
+def print_results(mean_mse, mean_mse_fit, clust_sizes, max_dists):
     for i in range(N_SCENARIOS):
         print('{}. (ALG: {}, LINK: {}) '.format(i, CLUST_ALGS[i][0], CLUST_ALGS[i][1]))
-        print('\tMean MSE: {}\tClust Sizes: {}\tMSE fit {}'
-                            .format(mean_mse[i], clust_sizes[i], mean_mse_fit[i]))
+        print('\tMean MSE: {}\tClust Sizes: {}\tMax Dist: {}\tMSE fit {}'
+                            .format(mean_mse[i], clust_sizes[i], max_dists[i], mean_mse_fit[i]))
 
 if __name__ == '__main__':
     # Graph parameters
@@ -96,7 +91,7 @@ if __name__ == '__main__':
     torch.manual_seed(SEED)
 
     G = StochasticBlockModel(N=N, k=k, p=p, q=q, connected=True, seed=SEED)    
-    sizes, descendances, hier_As = compute_clusters()
+    sizes, descendances, hier_As, max_dists = compute_clusters(k)
 
     start_time = time.time()
     mse_fit = np.zeros((n_signals, N_SCENARIOS))
@@ -113,5 +108,5 @@ if __name__ == '__main__':
     
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
-    print_results(np.mean(mse_est, axis=0), np.mean(mse_fit, axis=0), sizes)
+    print_results(np.mean(mse_est, axis=0), np.mean(mse_fit, axis=0), sizes, max_dists)
 

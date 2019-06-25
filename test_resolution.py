@@ -1,6 +1,6 @@
 """
-Check the efect of changing the upsampling algorithm for reconstructing the graph 
-signal from noise.
+Check the efect of changing the resolution levels and the type of method used for 
+defining the clusters after computing the distances
 """
 
 import sys
@@ -13,51 +13,56 @@ from pygsp.graphs import StochasticBlockModel, ErdosRenyi
 
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 import torch.nn as nn
 
 # Tuning parameters
 n_signals = 50
 L = 5
-n_p = 0.1 # SNR = 1/n_p
-batch_norm = True
-t = [4, 16, 64, 256] # Max clusters
-c_method = 'maxclust' # 'maxclust' or 'distance'
+n_p = 0 # SNR = 1/n_p
 alg = 'spectral_clutering'
-linkage = 'average'
+batch_norm = True #True
+up_method = 'weighted'
+gamma = 0.5
 n_chans = [2,2,2]
 last_act_fun = nn.Tanh()
 
-
 # Constants
 SEED = 15
-UPSAMPLING = [[None, None], ['original', None], ['no_A', None],
-              ['binary', 0], ['binary', .25], ['binary', .5], ['binary', .75],
-              ['weighted', 0], ['weighted', .25], ['weighted', .5], ['weighted', .75]]
-N_SCENARIOS = len(UPSAMPLING)
+RESOLUTIONS = [['maxclust', [4, 8, 16, 256], None],
+                ['maxclust', [4, 16, 64, 256], None],
+                ['maxclust', [4, 32, 128, 256], None],
+                ['maxclust', [2, 8, 32, 256], None],
+                ['maxclust', [2, 4, 64, 256], None],
+                ['distance',  [1, .75, .5, 0], 4],
+                ['distance',  [1, .66, .33, 0], 4],
+                ['distance',  [1, .8, .4, 0], 4],
+                ['distance',  [1, .75, .5, 0], 2],
+                ['distance',  [1, .3, .15, 0], 2]]
+N_SCENARIOS = len(RESOLUTIONS)
 
+# NOTE: compute_clusters is always the same..., only changing the arguments it uses (?)
 def compute_clusters():
     sizes = []
     descendances = []
     hier_As = []
     for i in range(N_SCENARIOS):
-        cluster = utils.MultiRessGraphClustering(G, t, alg, method=c_method,
-                                                        link_fun=linkage)
+        cluster = utils.MultiRessGraphClustering(G, RESOLUTIONS[i][1], alg,
+                                        k=RESOLUTIONS[i][2], method=RESOLUTIONS[i][0])
         sizes.append(cluster.clusters_size)
         descendances.append(cluster.compute_hierarchy_descendance())
-        hier_As.append(cluster.compute_hierarchy_A(UPSAMPLING[i][0]))
+        hier_As.append(cluster.compute_hierarchy_A(up_method))
 
     return sizes, descendances, hier_As
 
-def test_upsampling(x, sizes, descendances, hier_As):
+def test_resolution(x, sizes, descendances, hier_As):
     mse_est = np.zeros(N_SCENARIOS)
     mse_fit = np.zeros(N_SCENARIOS)
     x_n = x + np.random.randn(x.size)*np.sqrt(n_p)
     for i in range(N_SCENARIOS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
-                        n_channels=n_chans, upsampling=UPSAMPLING[i][0], 
-                        batch_norm=batch_norm, last_act_fun=last_act_fun,
-                        gamma=UPSAMPLING[i][1])
-
+                        n_channels=n_chans, upsampling=up_method, batch_norm=batch_norm,
+                        last_act_fun=last_act_fun, gamma=gamma)
         dec.build_network()
         x_est, mse_fit[i] = dec.fit(x_n)
         
@@ -65,11 +70,11 @@ def test_upsampling(x, sizes, descendances, hier_As):
     mse_fit = mse_fit/np.linalg.norm(x_n)
     return mse_est, mse_fit
 
-def print_results(mean_mse, mean_mse_fit):
+def print_results(mean_mse, mean_mse_fit, clust_sizes):
     for i in range(N_SCENARIOS):
-        print('{}. (UPSAMPLING: {}) '.format(i, UPSAMPLING[i]))
-        print('\tMean MSE: {}\tMSE fit {}'.format(mean_mse[i], mean_mse_fit[i]))
-
+        print('{}. (RES: {}) '.format(i, RESOLUTIONS[i]))
+        print('\tMean MSE: {}\tClust Sizes: {}\tMSE fit {}'
+                            .format(mean_mse[i], clust_sizes[i], mean_mse_fit[i]))
 
 if __name__ == '__main__':
     # Graph parameters
@@ -82,10 +87,10 @@ if __name__ == '__main__':
     np.random.seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
-    z = np.array(list(range(k))*int(N/k)+list(range(N%k)))
-    #z = None
-    G = StochasticBlockModel(N=N, k=k, p=p, q=q, z=z, connected=True, seed=SEED)    
+    G = StochasticBlockModel(N=N, k=k, p=p, q=q, connected=True, seed=SEED)    
     sizes, descendances, hier_As = compute_clusters()
+
+
     
     start_time = time.time()
     mse_fit = np.zeros((n_signals, N_SCENARIOS))
@@ -94,13 +99,12 @@ if __name__ == '__main__':
         for i in range(n_signals):
             signal = utils.DifussedSparseGraphSignal(G,L,-1,1)
             signal.to_unit_norm()
-            
-            result = pool.apply_async(test_upsampling,
+            result = pool.apply_async(test_resolution,
                                         args=[signal.x, sizes, descendances, hier_As])
 
         for i in range(n_signals):
-            mse_est[i,:], mse_fit[i,:] = result.get()
+            mse_est[i,:], n_params, mse_fit[i,:] = result.get()
 
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
-    print_results(np.mean(mse_est, axis=0), np.mean(mse_fit, axis=0))
+    print_results(np.mean(mse_est, axis=0), np.mean(mse_fit, axis=0), sizes)
