@@ -6,6 +6,10 @@ import numpy as np
 
 # TODO: maybe things like upmethod should use different classes!
 class GraphDeepDecoder():
+    @staticmethod
+    def set_seed(seed):
+        torch.manual_seed(seed)
+
     def __init__(self, descendance, 
                         hier_A, 
                         n_clust,
