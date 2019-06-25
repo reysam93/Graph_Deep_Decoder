@@ -86,12 +86,11 @@ class DifussedSparseGraphSignal():
 """
 """
 class MultiRessGraphClustering():
-    def __init__(self, G, n_clust, algorithm, method='maxclust', link_fun='average'):
+    def __init__(self, G, n_clust, algorithm, method='maxclust', link_fun='average', k=0):
         self.G = G
         # self.clusters_size = n_clust
         self.clusters_size = []
         self.cluster_alg = getattr(self, algorithm)
-        self.clust_method = method
         self.link_fun = link_fun
         self.labels = []
         self.Z = None
@@ -99,12 +98,18 @@ class MultiRessGraphClustering():
         self.hier_A = []
         self.cluster_alg(G)
 
-        for cluster in n_clust[:-1]:
-            level_labels = fcluster(self.Z, cluster, criterion=self.clust_method)
+        for t in n_clust[:-1]:
+            # t represent de relative distance, so it is necessary to obtain the 
+            # real desired distance
+            if method == 'distance':
+                t = t*self.Z[-k,2]
+            level_labels = fcluster(self.Z, t, criterion=method)
             self.labels.append(level_labels)
             self.clusters_size.append(np.unique(level_labels).size)
         self.labels.append(np.arange(1,G.W.shape[0]+1))
         self.clusters_size.append(G.W.shape[0])
+        
+
 
     def distance_clustering(self, G):
         D = dijkstra(G.W)
