@@ -9,12 +9,12 @@ class GraphDeepDecoder():
     def __init__(self, descendance, 
                         hier_A, 
                         n_clust,
-                        up_method='weighted',
+                        upsampling='weighted',
+                        gamma=0.5,
                         n_channels=[4]*3,
                         act_fun=nn.ReLU(),
                         last_act_fun=nn.Tanh(),#nn.Sigmoid(),
-                        batch_norm=True,
-                        upsampling=True):
+                        batch_norm=True):
         # BUG: check dimmensions --> carefull if A is not used
         # assert(len(descendance)==len(hier_A)-1==len(n_clust)-1==len(n_channels))
         self.descendance = descendance
@@ -25,10 +25,10 @@ class GraphDeepDecoder():
         self.act_fun = act_fun
         self.last_act_fun = last_act_fun
         self.n_clust = n_clust
-        self.up_method = up_method
-        self.batch_norm = batch_norm
         self.upsampling = upsampling
-        if self.upsampling:
+        self.gamma = gamma
+        self.batch_norm = batch_norm
+        if self.upsampling != None:
             shape = [1, self.n_channels[0], self.n_clust[0]]
         else:
             shape = [1, self.n_channels[0], self.n_clust[-1]]
@@ -42,9 +42,10 @@ class GraphDeepDecoder():
                         self.kernel_size, bias=False)
             self.add_layer(conv)
 
-            if l < len(self.n_channels)-2 and self.upsampling:
+            if l < len(self.n_channels)-2 and self.upsampling != None:
+                A = None if self.upsampling == 'no_A' else self.hier_A[l+1]
                 self.add_layer(GraphUpsampling(self.descendance[l], self.n_clust[l],
-                                                self.hier_A[l+1], self.up_method))
+                                                A, self.upsampling, self.gamma))
               
             if self.act_fun != None:
                 self.add_layer(self.act_fun)
@@ -103,12 +104,13 @@ Use information from the agglomerative hierarchical clustering for doing the ups
 creating the upsampling matrix U
 """
 class GraphUpsampling(nn.Module):
-    def __init__(self, descendance, parent_size, A, method):
+    def __init__(self, descendance, parent_size, A, method, gamma):
         super(GraphUpsampling, self).__init__()
         self.descendance = descendance
         self.parent_size = parent_size
         self.A = A
         self.method = method
+        self.gamma = gamma
         self.child_size = len(descendance)
         self.create_U()
 
@@ -119,25 +121,27 @@ class GraphUpsampling(nn.Module):
         self.U = torch.Tensor(self.U)#.to_sparse()
 
     def forward(self, input):
-        # NOTE:CHECK IF USING INFO OF ITS NEIGHBOURS ONLY OR ALSO ITS OWN!
+        # TODO: check if making ops with np instead of torch increase speed
         n_channels = input.shape[1]
         matrix_in = input.view(self.parent_size, n_channels)
 
+        parents_val = self.U.mm(matrix_in)
+        # NOTE: gamma = 1 is equivalent to no_A
+        # NOTE: gamma = 0 is equivalent to the prev setup
         if self.method == 'no_A':
-            output =  self.U.mm(matrix_in)
+            output = parents_val
         elif self.method == 'binary':
-            tensor_A = torch.Tensor(self.A/np.sum(self.A,0))
-            output =  tensor_A.mm(self.U.mm(matrix_in)) 
+            neigbours_val = torch.Tensor(self.A/np.sum(self.A,0)).mm(parents_val)
+            output = self.gamma*parents_val + (1-self.gamma)*neigbours_val
         elif self.method == 'weighted':
-            tensor_A =  torch.Tensor(self.A)
-            output =  tensor_A.mm(self.U.mm(matrix_in)) 
+            neigbours_val = torch.Tensor(self.A).mm(parents_val)
+            output =  self.gamma*parents_val + (1-self.gamma)*neigbours_val
         elif self.method == 'original':
             sf = self.child_size/self.parent_size
             output = torch.nn.functional.interpolate(input, scale_factor=sf,
                                     mode='linear', align_corners=True)
         else:
             raise RuntimeError('Unknown sampling method')
-
         return output.view(1, n_channels, self.child_size)
 
 
