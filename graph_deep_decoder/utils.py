@@ -99,8 +99,7 @@ class MultiRessGraphClustering():
         self.hier_A = []
         self.cluster_alg(G)
 
-        for cluster in n_clust[:-1]:  # cluster is t  
-            # for mthod maxclust
+        for cluster in n_clust[:-1]:
             level_labels = fcluster(self.Z, cluster, criterion=self.clust_method)
             self.labels.append(level_labels)
             self.clusters_size.append(np.unique(level_labels).size)
@@ -133,7 +132,7 @@ class MultiRessGraphClustering():
                 # Check if all has the same value!!!
                 n_parents = np.unique(self.labels[i+1][indexes]).size
                 if n_parents != 1:
-                    raise RuntimeError(" child {} belong to {} parents".format(j,n_parents))
+                    raise RuntimeError("child {} belong to {} parents".format(j,n_parents))
 
                 parent_id = self.labels[i][indexes][0]
                 self.descendance[i].append(parent_id)
@@ -141,9 +140,9 @@ class MultiRessGraphClustering():
         return self.descendance
 
     def compute_hierarchy_A(self, up_method):
-        # TODO: clear this
-        #if up_method == 'no_A':
-        #    return
+        if up_method == 'no_A' or up_method == None:
+            return
+
         A = self.G.W.todense()
         for i in range(len(self.clusters_size)):
             N = self.clusters_size[i]
@@ -177,5 +176,4 @@ class MultiRessGraphClustering():
             G.set_coordinates()
             axes[0,i].spy(self.hier_A[i])
             G.plot(ax=axes[1,i])
-
         plt.show()
