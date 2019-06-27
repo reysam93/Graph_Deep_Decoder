@@ -3,7 +3,7 @@ Check the efect of changing the upsampling algorithm for reconstructing the grap
 signal from noise.
 """
 
-import sys
+import sys, os
 import time
 from multiprocessing import Pool 
 sys.path.insert(0, 'graph_deep_decoder')
@@ -19,6 +19,7 @@ import torch.nn as nn
 n_signals = 50
 L = 5
 n_p = 0.1 # SNR = 1/n_p
+type_z = 'alternated'
 batch_norm = True
 t = [4, 16, 64, 256] # Max clusters
 c_method = 'maxclust' # 'maxclust' or 'distance'
@@ -35,12 +36,12 @@ UPSAMPLING = [[None, None], ['original', None], ['no_A', None],
               ['weighted', 0], ['weighted', .25], ['weighted', .5], ['weighted', .75]]
 N_SCENARIOS = len(UPSAMPLING)
 
-def compute_clusters():
+def compute_clusters(k):
     sizes = []
     descendances = []
     hier_As = []
     for i in range(N_SCENARIOS):
-        cluster = utils.MultiRessGraphClustering(G, t, alg, method=c_method,
+        cluster = utils.MultiRessGraphClustering(G, t, k, alg, method=c_method,
                                                         link_fun=linkage)
         sizes.append(cluster.clusters_size)
         descendances.append(cluster.compute_hierarchy_descendance())
@@ -70,29 +71,41 @@ def print_results(mean_mse, mean_mse_fit):
         print('{}. (UPSAMPLING: {}) '.format(i, UPSAMPLING[i]))
         print('\tMean MSE: {}\tMSE fit {}'.format(mean_mse[i], mean_mse_fit[i]))
 
+def save_results(mse_est, mse_fit, G_params):
+    if not os.path.isdir('./results/test_ups'):
+        os.makedirs('./results/test_arch')
+
+    data = {'SEED': SEED, 'UPSAMPLING': UPSAMPLING, 'type_z': type_z, 't': t,
+            'n_signals': n_signals, 'L': L, 'n_p': n_p, 'batch_norm': batch_norm,
+            'c_method': c_method, 'alg': alg, 'last_act_fun': last_act_fun,
+            'G_params': G_params, 'linkage': linkage, 'n_chans': n_chans,
+            'mse_est': mse_est, 'mse_fit': mse_fit}
+    timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
+    np.save('./results/ups_' + timestamp, data)
+
 
 if __name__ == '__main__':
     # Graph parameters
-    N = 256
-    k = 4
-    p = 0.15 #1/math.log(10*N)
-    q = 0.01/(k)
+    G_params = {}
+    G_params['type'] = 'SBM' # SBM or ER
+    G_params['N'] = N = 256
+    G_params['k'] = 4
+    G_params['p'] = 0.15
+    G_params['q'] = 0.01/k
 
     # Set seeds
     utils.DifussedSparseGraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
-    z = np.array(list(range(k))*int(N/k)+list(range(N%k)))
-    #z = None
-    G = StochasticBlockModel(N=N, k=k, p=p, q=q, z=z, connected=True, seed=SEED)    
-    sizes, descendances, hier_As = compute_clusters()
+    G = utils.create_graph(G_params, type_z)   
+    sizes, descendances, hier_As = compute_clusters(G_params['k'])
     
     start_time = time.time()
     mse_fit = np.zeros((n_signals, N_SCENARIOS))
     mse_est = np.zeros((n_signals, N_SCENARIOS))
     with Pool() as pool:
         for i in range(n_signals):
-            signal = utils.DifussedSparseGraphSignal(G,L,-1,1)
+            signal = utils.DifussedSparseGraphSignal(G,L,G_params['k'])
             signal.to_unit_norm()
             
             result = pool.apply_async(test_upsampling,
@@ -104,3 +117,4 @@ if __name__ == '__main__':
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
     print_results(np.mean(mse_est, axis=0), np.mean(mse_fit, axis=0))
+    save_results(mse_est, mse_fit, G_params)
