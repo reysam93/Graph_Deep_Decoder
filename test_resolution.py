@@ -78,14 +78,14 @@ def print_results(mean_mse, mean_mse_fit, clust_sizes):
 
 def save_results(mse_est, mse_fit, G_params):
     if not os.path.isdir('./results/test_res'):
-        os.makedirs('./results/test_arch')
+        os.makedirs('./results/test_res')
 
     data = {'SEED': SEED, 'RESOLUTIONS': RESOLUTIONS, 'alg': alg, 'gamma': gamma,
             'n_signals': n_signals, 'L': L, 'n_p': n_p, 'batch_norm': batch_norm,
             'up_method': up_method, 'last_act_fun': last_act_fun, 'G_params': G_params,
             'mse_est': mse_est, 'mse_fit': mse_fit, 'n_chans': n_chans}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    np.save('./results/res_' + timestamp, data)
+    np.save('./results/test_res/res_' + timestamp, data)
 
 if __name__ == '__main__':
     # Graph parameters

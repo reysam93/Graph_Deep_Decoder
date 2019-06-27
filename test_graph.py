@@ -91,7 +91,7 @@ def print_results(mean_mse, mean_mse_fit, clust_sizes):
                             .format(mean_mse[i], clust_sizes[i], mean_mse_fit[i]))
 
 def save_results(mse_est, mse_fit, n_params, G_params):
-    if not os.path.isdir('./results/test_arch'):
+    if not os.path.isdir('./results/test_graph'):
         os.makedirs('./results/test_graph')
 
     data = {'SEED': SEED, 'G_PARAMS': G_PARAMS, 't': t, 'c_method': c_method, 'alg': alg,
@@ -100,7 +100,7 @@ def save_results(mse_est, mse_fit, n_params, G_params):
             'n_chans': n_chans, 'gamma': gamma, 'mse_est': mse_est, 'mse_fit': mse_fit}
     
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    np.save('./results/graph_' + timestamp, data)
+    np.save('./results/test_graph/graph_' + timestamp, data)
 
 
 if __name__ == '__main__':

@@ -80,14 +80,14 @@ def print_results(mean_mse, mean_mse_fit, clust_sizes, max_dists):
 
 def save_results(mse_est, mse_fit, G_params):
     if not os.path.isdir('./results/test_clust'):
-        os.makedirs('./results/test_arch')
+        os.makedirs('./results/test_clust')
 
     data = {'SEED': SEED, 'CLUST_ALGS': CLUST_ALGS, 'n_signals': n_signals, 'L': L, 
             'n_p': n_p, 'batch_norm': batch_norm, 'up_method': up_method, 't': t,
             'c_method': c_method, 'n_chans': n_chans, 'last_act_fun': last_act_fun,
             'G_params': G_params, 'mse_est': mse_est, 'mse_fit': mse_fit}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    np.save('./results/clust_' + timestamp, data)
+    np.save('./results/test_clust/clust_' + timestamp, data)
 
 
 # Tuning parameters

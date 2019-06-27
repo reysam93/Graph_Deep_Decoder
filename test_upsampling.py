@@ -73,7 +73,7 @@ def print_results(mean_mse, mean_mse_fit):
 
 def save_results(mse_est, mse_fit, G_params):
     if not os.path.isdir('./results/test_ups'):
-        os.makedirs('./results/test_arch')
+        os.makedirs('./results/test_ups')
 
     data = {'SEED': SEED, 'UPSAMPLING': UPSAMPLING, 'type_z': type_z, 't': t,
             'n_signals': n_signals, 'L': L, 'n_p': n_p, 'batch_norm': batch_norm,
@@ -81,7 +81,7 @@ def save_results(mse_est, mse_fit, G_params):
             'G_params': G_params, 'linkage': linkage, 'n_chans': n_chans,
             'mse_est': mse_est, 'mse_fit': mse_fit}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    np.save('./results/ups_' + timestamp, data)
+    np.save('./results/test_ups/ups_' + timestamp, data)
 
 
 if __name__ == '__main__':

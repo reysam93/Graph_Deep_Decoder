@@ -5,7 +5,6 @@ from multiprocessing import Pool
 sys.path.insert(0, 'graph_deep_decoder')
 from graph_deep_decoder import utils
 from graph_deep_decoder.architecture import GraphDeepDecoder
-from pygsp.graphs import StochasticBlockModel
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -27,6 +26,8 @@ EXPERIMENTS = [{'ups': 'original', 'arch': [2,2,2], 't': [4,16,64,None], 'gamma'
                {'ups': 'no_A', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': None},
                {'ups': 'weighted', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': 0},
                {'ups': 'weighted', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': .75},]
+
+FMTS = ['o-', '^-', '+-', 'x-', 'o--', '^--', '+--', 'x--', 'o:', '^:', '+:', 'x:']
 
 G_PARAMS = [{'type': 'SBM','N': 256,'k': 4,'p': 0.15,'q': 0.01/4},
             {'type': 'SBM','N': 512,'k': 4,'p': 0.075,'q': 0.001},
@@ -67,17 +68,19 @@ def print_results(N, mean_mse, params, n_p):
 
 def plot_results(mean_mse):
     plt.figure()
-    plt.plot(N_P, mean_mse)
+    for i in range(len(EXPERIMENTS)):
+        plt.plot(N_P, mean_mse[:,i], FMTS[i])
+    
     plt.xlabel('Noise Power')
     plt.ylabel('Mean MSE')
     legend = [str(exp) for exp in EXPERIMENTS]
     plt.legend(legend)
 
 def save_results(mse_est, N):
-    if not os.path.isdir('./results'):
-        os.makedirs('./results')
+    if not os.path.isdir('./results/denoising'):
+        os.makedirs('./results/denoising')
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    np.save('./results/denoise_N_{}_{}'.format(N, timestamp), mse_est)
+    np.save('./results/denoising/denoise_N_{}_{}'.format(N, timestamp), mse_est)
 
 
 if __name__ == '__main__':
