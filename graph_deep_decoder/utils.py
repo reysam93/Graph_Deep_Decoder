@@ -48,12 +48,21 @@ def create_graph(ps, seed=None, type_z='alternated'):
         raise RuntimeError('Unknown graph type')
 
 class DifussedSparseGraphSignal():
+    @staticmethod
+    def set_seed(seed):
+        np.random.seed(seed)
+
+    @staticmethod
+    def add_noise(x, n_p):
+        return x + np.random.randn(x.size)*np.sqrt(n_p)
+
     def  __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
         self.G = G
         self.n_deltas = n_deltas
         self.random_sparse_s(min_d, max_d)
         self.random_diffusing_filter(L)
         self.x = np.asarray(self.H.dot(self.s))
+        self.x_n = None
         
     """
     Create random sparsee signal s composed of different deltas placed in the different

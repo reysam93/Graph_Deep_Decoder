@@ -31,15 +31,6 @@ N_CLUSTS = [[4,16,64,256]]*4 + [[4,256]]*2 + [[4,16,64,128,256]] + \
              [[4,8,16,32,64,128,256]] + [[4, 8, 16, 64, 256]]
 N_SCENARIOS = len(N_CHANS)
 
-def create_graph(params):
-    if params['type'] == 'SBM':
-        return StochasticBlockModel(N=params['N'], k=params['k'], p=params['p'],
-                                    q=params['q'], connected=True, seed=SEED)
-    elif params['type'] == 'ER':
-        return ErdosRenyi(N=params['N'], p=params['p'], connected=True, seed=SEED)
-    else:
-        raise RuntimeError('Unknown graph type')
-
 def plot_clusters(G, cluster):
     G.set_coordinates(kind='community2D')
     _, axes = plt.subplots(1, 2)
@@ -64,7 +55,7 @@ def test_architecture(x, sizes, descendances, hier_As):
     mse_est = np.zeros(N_SCENARIOS)
     mse_fit = np.zeros(N_SCENARIOS)
     params = np.zeros(N_SCENARIOS)
-    x_n = x + np.random.randn(x.size)*np.sqrt(n_p)
+    x_n = utils.DifussedSparseGraphSignal.add_noise(x, n_p)
     for i in range(N_SCENARIOS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=N_CHANS[i], upsampling=up_method, batch_norm=batch_norm,
@@ -99,10 +90,10 @@ if __name__ == '__main__':
     method = 'maxclust'
     
     # Set seeds
-    np.random.seed(SEED)
-    torch.manual_seed(SEED)
+    utils.DifussedSparseGraphSignal.set_seed(SEED)
+    GraphDeepDecoder.set_seed(SEED)
 
-    G = create_graph(G_params)
+    G = utils.create_graph(G_params)
     sizes, descendances, hier_As = compute_clusters(alg)
     
     start_time = time.time()

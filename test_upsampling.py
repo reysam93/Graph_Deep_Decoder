@@ -51,7 +51,7 @@ def compute_clusters():
 def test_upsampling(x, sizes, descendances, hier_As):
     mse_est = np.zeros(N_SCENARIOS)
     mse_fit = np.zeros(N_SCENARIOS)
-    x_n = x + np.random.randn(x.size)*np.sqrt(n_p)
+    x_n = utils.DifussedSparseGraphSignal.add_noise(x, n_p)
     for i in range(N_SCENARIOS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=n_chans, upsampling=UPSAMPLING[i][0], 
@@ -79,7 +79,7 @@ if __name__ == '__main__':
     q = 0.01/(k)
 
     # Set seeds
-    np.random.seed(SEED)
+    utils.DifussedSparseGraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     z = np.array(list(range(k))*int(N/k)+list(range(N%k)))

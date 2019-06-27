@@ -19,7 +19,7 @@ import torch.nn as nn
 # Tuning parameters
 n_signals = 50
 L = 5
-n_p = 0 # SNR = 1/n_p
+n_p = 0.1 # SNR = 1/n_p
 alg = 'spectral_clutering'
 batch_norm = True #True
 up_method = 'weighted'
@@ -58,7 +58,7 @@ def compute_clusters():
 def test_resolution(x, sizes, descendances, hier_As):
     mse_est = np.zeros(N_SCENARIOS)
     mse_fit = np.zeros(N_SCENARIOS)
-    x_n = x + np.random.randn(x.size)*np.sqrt(n_p)
+    x_n = utils.DifussedSparseGraphSignal.add_noise(x, n_p)
     for i in range(N_SCENARIOS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=n_chans, upsampling=up_method, batch_norm=batch_norm,
@@ -84,14 +84,12 @@ if __name__ == '__main__':
     q = 0.01/(k)
 
     # Set seeds
-    np.random.seed(SEED)
+    utils.DifussedSparseGraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     G = StochasticBlockModel(N=N, k=k, p=p, q=q, connected=True, seed=SEED)    
     sizes, descendances, hier_As = compute_clusters()
 
-
-    
     start_time = time.time()
     mse_fit = np.zeros((n_signals, N_SCENARIOS))
     mse_est = np.zeros((n_signals, N_SCENARIOS))
@@ -103,7 +101,7 @@ if __name__ == '__main__':
                                         args=[signal.x, sizes, descendances, hier_As])
 
         for i in range(n_signals):
-            mse_est[i,:], n_params, mse_fit[i,:] = result.get()
+            mse_est[i,:], mse_fit[i,:] = result.get()
 
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))

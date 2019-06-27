@@ -60,7 +60,7 @@ def compute_clusters(k):
 def test_clustering(x, sizes, descendances, hier_As):
     mse_est = np.zeros(N_SCENARIOS)
     mse_fit = np.zeros(N_SCENARIOS)
-    x_n = x + np.random.randn(x.size)*np.sqrt(n_p)
+    x_n = utils.DifussedSparseGraphSignal.add_noise(x, n_p)
 
     for i in range(N_SCENARIOS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
@@ -87,8 +87,8 @@ if __name__ == '__main__':
     q = 0.01/(k)
 
     # Set seeds
-    np.random.seed(SEED)
-    torch.manual_seed(SEED)
+    utils.DifussedSparseGraphSignal.set_seed(SEED)
+    GraphDeepDecoder.set_seed(SEED)
 
     G = StochasticBlockModel(N=N, k=k, p=p, q=q, connected=True, seed=SEED)    
     sizes, descendances, hier_As, max_dists = compute_clusters(k)

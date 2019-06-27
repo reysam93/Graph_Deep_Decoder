@@ -73,7 +73,7 @@ def test_graphs(signals, sizes, descendances, hier_As):
     mse_fit = np.zeros(N_SCENARIOS)
     for i in range(N_SCENARIOS):
         x = signals[i]
-        x_n = x + np.random.randn(x.size)*np.sqrt(n_p)
+        x_n = utils.DifussedSparseGraphSignal.add_noise(x, n_p)
 
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=n_chans, upsampling=up_method, batch_norm=batch_norm,
@@ -95,7 +95,7 @@ if __name__ == '__main__':
     input_size = 4
 
     # Set seeds
-    np.random.seed(SEED)
+    utils.DifussedSparseGraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     Gs = [utils.create_graph(G_PARAMS[i], seed=SEED) for i in range(N_SCENARIOS)] 
