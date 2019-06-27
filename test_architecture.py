@@ -83,7 +83,7 @@ def save_results(mse_est, mse_fit, n_params, G_params):
             'up_method': up_method, 'last_act_fun': last_act_fun, 'G_params': G_params,
             'mse_est': mse_est, 'mse_fit': mse_fit, 'n_params': n_params}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    np.save('./results/arch_' + timestamp, data)
+    np.save('./results/test_arch/arch_' + timestamp, data)
 
 
 if __name__ == '__main__':
