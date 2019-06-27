@@ -47,7 +47,7 @@ def compute_clusters(G, root_clust):
 def denoise(x, sizes, descendances, hier_As, n_p):
     mse_est = np.zeros(len(EXPERIMENTS))
     params = np.zeros(len(EXPERIMENTS))
-    x_n = x + np.random.randn(x.size)*np.sqrt(n_p)
+    x_n = utils.DifussedSparseGraphSignal.add_noise(x, n_p)
     for i, exp in enumerate(EXPERIMENTS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=exp['arch'], upsampling=exp['ups'],
@@ -84,7 +84,7 @@ if __name__ == '__main__':
     L = 5
 
     # Set seeds
-    np.random.seed(SEED)
+    utils.DifussedSparseGraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     start_time = time.time()
