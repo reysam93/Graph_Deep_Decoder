@@ -13,13 +13,12 @@ from pygsp.graphs import StochasticBlockModel, ErdosRenyi
 
 import numpy as np
 import matplotlib.pyplot as plt
-import torch
 import torch.nn as nn
 
 # Tuning parameters
-n_signals = 50
+n_signals = 200
 L = 5
-n_p = 0.0 # SNR = 1/n_p
+n_p = 0.1 # SNR = 1/n_p
 batch_norm = True #True
 up_method = 'weighted'
 last_act_fun = nn.Tanh() #nn.Sigmoid()
@@ -38,14 +37,14 @@ def plot_clusters(G, cluster):
     axes[1].spy(G.W)
     plt.show()
 
-def compute_clusters(alg):
+def compute_clusters(alg, k):
     assert(len(N_CHANS) == len(N_CLUSTS))
     sizes = []
     descendances = []
     hier_As = []
     for i in range(len(N_CHANS)):
         assert(len(N_CHANS[i])+1 == len(N_CLUSTS[i]))
-        cluster = utils.MultiRessGraphClustering(G, N_CLUSTS[i], alg)
+        cluster = utils.MultiRessGraphClustering(G, N_CLUSTS[i], k, alg)
         sizes.append(cluster.clusters_size)
         descendances.append(cluster.compute_hierarchy_descendance())
         hier_As.append(cluster.compute_hierarchy_A(up_method))
@@ -105,14 +104,14 @@ if __name__ == '__main__':
     GraphDeepDecoder.set_seed(SEED)
 
     G = utils.create_graph(G_params)
-    sizes, descendances, hier_As = compute_clusters(alg)
+    sizes, descendances, hier_As = compute_clusters(alg, G_params['k'])
     
     start_time = time.time()
     mse_fit = np.zeros((n_signals, N_SCENARIOS))
     mse_est = np.zeros((n_signals, N_SCENARIOS))
     with Pool() as pool:
         for i in range(n_signals):
-            signal = utils.DifussedSparseGraphSignal(G,L,-1,1)
+            signal = utils.DifussedSparseGraphSignal(G,L,G_params['k'])
             signal.to_unit_norm()
             result = pool.apply_async(test_architecture,
                                         args=[signal.x, sizes, descendances, hier_As])
