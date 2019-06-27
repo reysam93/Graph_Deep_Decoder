@@ -2,8 +2,8 @@
 Check the efect of the graph
 """
 
-import sys
-import time
+import sys, os
+import time, datetime
 from multiprocessing import Pool 
 sys.path.insert(0, 'graph_deep_decoder')
 from graph_deep_decoder import utils
@@ -90,6 +90,18 @@ def print_results(mean_mse, mean_mse_fit, clust_sizes):
         print('\tMean MSE: {}\tClust Sizes: {}\tMSE fit {}'
                             .format(mean_mse[i], clust_sizes[i], mean_mse_fit[i]))
 
+def save_results(mse_est, mse_fit, n_params, G_params):
+    if not os.path.isdir('./results/test_arch'):
+        os.makedirs('./results/test_graph')
+
+    data = {'SEED': SEED, 'G_PARAMS': G_PARAMS, 't': t, 'c_method': c_method, 'alg': alg,
+            'n_signals': n_signals, 'L': L, 'n_p': n_p, 'batch_norm': batch_norm,
+            'up_method': up_method, 'last_act_fun': last_act_fun, 'link': link,
+            'n_chans': n_chans, 'gamma': gamma, 'mse_est': mse_est, 'mse_fit': mse_fit}
+    
+    timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
+    np.save('./results/graph_' + timestamp, data)
+
 
 if __name__ == '__main__':
     input_size = 4
@@ -116,4 +128,4 @@ if __name__ == '__main__':
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
     print_results(np.mean(mse_est, axis=0), np.mean(mse_fit, axis=0), sizes)
-
+    save_results(mse_est, mse_fit, n_params, G_params)
