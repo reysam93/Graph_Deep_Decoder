@@ -3,8 +3,8 @@ Check the efect of changing the size of the architecture for controlig the numbe
 parameters which represent the signal
 """
 
-import sys
-import time
+import sys, os
+import time, datetime
 from multiprocessing import Pool 
 sys.path.insert(0, 'graph_deep_decoder')
 from graph_deep_decoder import utils
@@ -26,8 +26,8 @@ last_act_fun = nn.Tanh() #nn.Sigmoid()
 
 # Constants
 SEED = 15
-N_CHANS = [[4]*3, [6]*3, [2]*3, [10,5,3], [4], [9], [4]*4, [3]*6, [8,6,4,2]]
-N_CLUSTS = [[4,16,64,256]]*4 + [[4,256]]*2 + [[4,16,64,128,256]] + \
+N_CHANS = [[4]*3, [6]*3, [2]*3, [2,2,1], [10,5,3], [4], [9], [4]*4, [3]*6, [8,6,4,2]]
+N_CLUSTS = [[4,16,64,256]]*5 + [[4,256]]*2 + [[4,16,64,128,256]] + \
              [[4,8,16,32,64,128,256]] + [[4, 8, 16, 64, 256]]
 N_SCENARIOS = len(N_CHANS)
 
@@ -75,6 +75,17 @@ def print_results(N, mean_mse, params, mean_mse_fit):
         print('\tMean MSE: {}\tParams: {}\tCompression: {}\tMSE fit {}'
                             .format(mean_mse[i], params[i], N/params[i], mean_mse_fit[i]))
 
+def save_results(mse_est, mse_fit, n_params, G_params):
+    if not os.path.isdir('./results/test_arch'):
+        os.makedirs('./results/test_arch')
+
+    data = {'SEED': SEED, 'N_CHANS': N_CHANS, 'N_CLUSTS': N_CLUSTS,
+            'n_signals': n_signals, 'L': L, 'n_p': n_p, 'batch_norm': batch_norm,
+            'up_method': up_method, 'last_act_fun': last_act_fun, 'G_params': G_params,
+            'mse_est': mse_est, 'mse_fit': mse_fit, 'n_params': n_params}
+    timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
+    np.save('./results/arch_' + timestamp, data)
+
 
 if __name__ == '__main__':
     # Graph parameters
@@ -112,5 +123,6 @@ if __name__ == '__main__':
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
     print_results(N, np.mean(mse_est, axis=0), n_params, np.mean(mse_fit, axis=0))
+    save_results(mse_est, mse_fit, n_params, G_params)
     
     
