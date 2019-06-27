@@ -4,7 +4,8 @@ from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 from scipy.sparse.csgraph import dijkstra
 from scipy import sparse
 import matplotlib.pyplot as plt
-from pygsp.graphs import Graph
+from pygsp.graphs import Graph, StochasticBlockModel, ErdosRenyi
+
 
 """
 Distribute contiguous nodes in the same community while assuring that all
@@ -31,9 +32,25 @@ def plot_graph_clusters(G, labels, n_clusts):
         G.plot_signal(labels[i], ax=axes[i])
     plt.show()
 
+def create_graph(ps, seed=None, type_z='alternated'):
+    if ps['type'] == 'SBM':
+        if type_z == 'contiguos':
+            z = assign_nodes_to_comms(ps['N'],ps['k'])
+        elif type_z == 'alternated':
+            z = np.array(list(range(ps['k']))*int(ps['N']/ps['k'])+list(range(ps['N']%ps['k'])))
+        else:
+            z = None
+        return StochasticBlockModel(N=ps['N'], k=ps['k'], p=ps['p'], z=z,
+                                    q=ps['q'], connected=True, seed=seed)
+    elif ps['type'] == 'ER':
+        return ErdosRenyi(N=ps['N'], p=ps['p'], connected=True, seed=seed)
+    else:
+        raise RuntimeError('Unknown graph type')
+
 class DifussedSparseGraphSignal():
-    def  __init__(self, G, L, min_d=0, max_d=1):
+    def  __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
         self.G = G
+        self.n_deltas = n_deltas
         self.random_sparse_s(min_d, max_d)
         self.random_diffusing_filter(L)
         self.x = np.asarray(self.H.dot(self.s))
@@ -44,18 +61,18 @@ class DifussedSparseGraphSignal():
     """
     def random_sparse_s(self, min_delta, max_delta):
         # Create delta values
-        k = self.G.info['comm_sizes'].shape[0]
-        step = (max_delta-min_delta)/(k-1)
+        step = (max_delta-min_delta)/(self.n_deltas-1)
         delta_means = np.arange(min_delta, max_delta+0.1, step)
-        delta_values = np.random.randn(k)*step/4 + delta_means
+        delta_values = np.random.randn(self.n_deltas)*step/4 + delta_means
 
         # Randomly assign delta value to comm nodes
         self.s = np.zeros((self.G.W.shape[0]))
-        for i in range(k):
-            comm_nodes, = np.asarray(self.G.info['node_com']==i).nonzero()
-            rand_index = np.random.randint(0,self.G.info['comm_sizes'][i])
+        for delta in range(self.n_deltas):
+            comm_i = delta % self.G.info['comm_sizes'].size
+            comm_nodes, = np.asarray(self.G.info['node_com']==comm_i).nonzero()
+            rand_index = np.random.randint(0,self.G.info['comm_sizes'][comm_i])
             selected_node = comm_nodes[rand_index]
-            self.s[selected_node] = delta_values[i]
+            self.s[selected_node] = delta_values[comm_i]
 
     """
     Create a random diffusing filter with L random coefficients  
@@ -63,7 +80,6 @@ class DifussedSparseGraphSignal():
     def random_diffusing_filter(self, L):
         # NOTE: One filter or one per comm??
         hs = np.random.rand(L)
-        #hs = np.random.uniform(size=L)
         self.H = np.zeros(self.G.W.shape)
         S = self.G.W.todense()
         for l in range(L):
@@ -86,18 +102,21 @@ class DifussedSparseGraphSignal():
 """
 """
 class MultiRessGraphClustering():
-    def __init__(self, G, n_clust, algorithm, method='maxclust', link_fun='average', k=0):
+    # k represents the size of the root cluster
+    def __init__(self, G, n_clust, k, algorithm='spectral_clutering', 
+                    method='maxclust', link_fun='average'):
         self.G = G
         # self.clusters_size = n_clust
         self.clusters_size = []
         self.cluster_alg = getattr(self, algorithm)
+        self.k = k
         self.link_fun = link_fun
         self.labels = []
         self.Z = None
         self.descendance = {}
         self.hier_A = []
         self.cluster_alg(G)
-
+        
         for t in n_clust[:-1]:
             # t represent de relative distance, so it is necessary to obtain the 
             # real desired distance
@@ -108,8 +127,6 @@ class MultiRessGraphClustering():
             self.clusters_size.append(np.unique(level_labels).size)
         self.labels.append(np.arange(1,G.W.shape[0]+1))
         self.clusters_size.append(G.W.shape[0])
-        
-
 
     def distance_clustering(self, G):
         D = dijkstra(G.W)
@@ -119,8 +136,7 @@ class MultiRessGraphClustering():
     def spectral_clutering(self, G):
         G.compute_laplacian()
         G.compute_fourier_basis()
-        k = G.info['comm_sizes'].shape[0]
-        X = G.U[:,1:k]
+        X = G.U[:,1:self.k]
         self.Z = linkage(X, self.link_fun)
 
     def plot_dendrogram(self):
@@ -145,7 +161,7 @@ class MultiRessGraphClustering():
         return self.descendance
 
     def compute_hierarchy_A(self, up_method):
-        if up_method == 'no_A' or up_method == None:
+        if up_method == 'no_A' or up_method == None or up_method == 'original':
             return
 
         A = self.G.W.todense()

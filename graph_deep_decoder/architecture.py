@@ -47,7 +47,7 @@ class GraphDeepDecoder():
             self.add_layer(conv)
 
             if l < len(self.n_channels)-2 and self.upsampling != None:
-                A = None if self.upsampling == 'no_A' else self.hier_A[l+1]
+                A = None if self.upsampling == 'no_A' or self.upsampling == 'original' else self.hier_A[l+1]
                 self.add_layer(GraphUpsampling(self.descendance[l], self.n_clust[l],
                                                 A, self.upsampling, self.gamma))
               
@@ -83,12 +83,7 @@ class GraphDeepDecoder():
                 optimizer.zero_grad()
                 out = self.model(self.input)
                 loss = mse(out, signal_var)
-                loss.backward()
-                
-                #if i % 50 == 0:
-                #    out2 = self.model(Variable(self.input))
-                #    loss2 = mse(out2, signal_var)
-                #    print ('Iteration %05d    Train loss %f  Actual loss %f' % (i, loss.data,loss2.data), '\r', end='')
+                loss.backward()                
                 return loss
 
             loss = optimizer.step(closure)
@@ -125,7 +120,7 @@ class GraphUpsampling(nn.Module):
         self.U = torch.Tensor(self.U)#.to_sparse()
 
     def forward(self, input):
-        # TODO: check if making ops with np instead of torch increase speed
+        # TODO: check if making ops with np instead of torch may increase speed
         n_channels = input.shape[1]
         matrix_in = input.view(self.parent_size, n_channels)
 
