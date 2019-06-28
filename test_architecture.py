@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 # Tuning parameters
-n_signals = 3
+n_signals = 200
 L = 6
 n_p = 0 # SNR = 1/n_p
 batch_norm = True #True
@@ -121,8 +121,6 @@ if __name__ == '__main__':
             signal.to_unit_norm()
             result = pool.apply_async(test_architecture,
                                         args=[signal.x, sizes, descendances, hier_As])
-
-        signal.plot()
 
         for i in range(n_signals):
             print('Signal',i)
