@@ -54,7 +54,7 @@ class DifussedSparseGraphSignal():
 
     @staticmethod
     def add_noise(x, n_p):
-        return x + np.random.randn(x.size)*np.sqrt(n_p)
+        return x + np.random.randn(x.size)*np.sqrt(n_p/x.size)
 
     def  __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
         self.G = G
