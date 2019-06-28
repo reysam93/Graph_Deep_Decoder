@@ -16,19 +16,21 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 # Tuning parameters
-n_signals = 200
-L = 5
-n_p = 0.1 # SNR = 1/n_p
+n_signals = 3
+L = 6
+n_p = 0 # SNR = 1/n_p
 batch_norm = True #True
+act_fun = nn.ReLU()
 up_method = 'weighted'
-last_act_fun = nn.Tanh() #nn.Sigmoid()
+last_act_fun = nn.Sigmoid() #nn.Tanh()
 
 # Constants
 SEED = 15
 N_CHANS = [[6]*3, [4]*3, [3]*3, [2]*3, [10,5,3],  [4,3,3], [4], [9], [4]*4, [8,6,4,2],
-           [4,3,2,2], [3]*6, [2]*6]
+           [4,3,2,2], [3]*6, [2]*6, [4, 4, 3, 3, 2], [8, 8, 8, 8]]
 N_CLUSTS = [[4,16,64,256]]*6 + [[4,256]]*2 + [[4,16,32,64,256]]*3 + \
-            [[4,8,16,32,64,128,256]]*2
+            [[4,8,16,32,64,128,256]]*2 + [[4, 8, 16 ,32, 64, 256]] + \
+            [[4, 16, 32, 64, 256]]
 N_SCENARIOS = len(N_CHANS)
 
 def plot_clusters(G, cluster):
@@ -52,39 +54,41 @@ def compute_clusters(alg, k):
     return sizes, descendances, hier_As
 
 def test_architecture(x, sizes, descendances, hier_As):
-    mse_est = np.zeros(N_SCENARIOS)
+    error = np.zeros(N_SCENARIOS)
     mse_fit = np.zeros(N_SCENARIOS)
     params = np.zeros(N_SCENARIOS)
-    x_n = utils.DifussedSparseGraphSignal.add_noise(x, n_p)
+    x_n = utils.RandomGraphSignal.add_noise(x, n_p)
     for i in range(N_SCENARIOS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=N_CHANS[i], upsampling=up_method, batch_norm=batch_norm,
-                        last_act_fun=last_act_fun)
+                        last_act_fun=last_act_fun, act_fun=act_fun)
 
         dec.build_network()
         x_est, mse_fit[i] = dec.fit(x_n)
         
-        mse_est[i] = np.mean(np.square(x-x_est))/np.linalg.norm(x)
+        error[i] = np.sum(np.square(x-x_est))/np.linalg.norm(x)
         params[i] = dec.count_params()
-    mse_fit = mse_fit/np.linalg.norm(x_n)
-    return mse_est, params, mse_fit
+        print('\tScenario {} ({} params): Error: {:.4f}'
+                            .format(i, params[i], error[i]))
+    mse_fit = mse_fit/np.linalg.norm(x_n)*x_n.size
+    return error, params, mse_fit
 
-def print_results(N, mean_mse, params, mean_mse_fit):
+def print_results(N, mean_error, params, mean_mse_fit):
     for i in range(N_SCENARIOS):
         print('{}. (CHANS {}, CLUSTS: {}) '.format(i+1, N_CHANS[i], N_CLUSTS[i]))
         print('\tMean MSE: {}\tParams: {}\tCompression: {}\tMSE fit {}'
-                            .format(mean_mse[i], params[i], N/params[i], mean_mse_fit[i]))
+                            .format(mean_error[i], params[i], N/params[i], mean_mse_fit[i]))
 
-def save_results(mse_est, mse_fit, n_params, G_params, p_n):
+def save_results(error, mse_fit, n_params, G_params, n_p):
     if not os.path.isdir('./results/test_arch'):
         os.makedirs('./results/test_arch')
 
     data = {'SEED': SEED, 'N_CHANS': N_CHANS, 'N_CLUSTS': N_CLUSTS,
             'n_signals': n_signals, 'L': L, 'n_p': n_p, 'batch_norm': batch_norm,
             'up_method': up_method, 'last_act_fun': last_act_fun, 'G_params': G_params,
-            'mse_est': mse_est, 'mse_fit': mse_fit, 'n_params': n_params}
+            'mse_est': error, 'mse_fit': mse_fit, 'n_params': n_params}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    np.save('./results/test_arch/arch_pn_{}_{}'.format(p_n, timestamp), data)
+    np.save('./results/test_arch/arch_pn_{}_{}'.format(n_p, timestamp), data)
 
 
 if __name__ == '__main__':
@@ -101,7 +105,7 @@ if __name__ == '__main__':
     method = 'maxclust'
     
     # Set seeds
-    utils.DifussedSparseGraphSignal.set_seed(SEED)
+    utils.RandomGraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     G = utils.create_graph(G_params)
@@ -109,20 +113,24 @@ if __name__ == '__main__':
     
     start_time = time.time()
     mse_fit = np.zeros((n_signals, N_SCENARIOS))
-    mse_est = np.zeros((n_signals, N_SCENARIOS))
+    error = np.zeros((n_signals, N_SCENARIOS))
     with Pool() as pool:
         for i in range(n_signals):
-            signal = utils.DifussedSparseGraphSignal(G,L,G_params['k'])
+            signal = utils.DifussedSparseGS(G,L,G_params['k'])
+            signal.signal_to_0_1_interval()
             signal.to_unit_norm()
             result = pool.apply_async(test_architecture,
                                         args=[signal.x, sizes, descendances, hier_As])
 
+        signal.plot()
+
         for i in range(n_signals):
-            mse_est[i,:], n_params, mse_fit[i,:] = result.get()
-    
+            print('Signal',i)
+            error[i,:], n_params, mse_fit[i,:] = result.get()
+
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
-    print_results(N, np.mean(mse_est, axis=0), n_params, np.mean(mse_fit, axis=0))
-    save_results(mse_est, mse_fit, n_params, G_params, p_n)
+    print_results(N, np.mean(error, axis=0), n_params, np.mean(mse_fit, axis=0))
+    save_results(error, mse_fit, n_params, G_params, n_p)
     
     

@@ -47,7 +47,7 @@ def create_graph(ps, seed=None, type_z='alternated'):
     else:
         raise RuntimeError('Unknown graph type')
 
-class DifussedSparseGraphSignal():
+class RandomGraphSignal():
     @staticmethod
     def set_seed(seed):
         np.random.seed(seed)
@@ -56,13 +56,35 @@ class DifussedSparseGraphSignal():
     def add_noise(x, n_p):
         return x + np.random.randn(x.size)*np.sqrt(n_p/x.size)
 
-    def  __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
+    # NOTE: make static method for giving objct
+    # from desired signal class?
+    def __init__(self, G):
         self.G = G
+        self.x = None
+        self.x_n = None
+
+    def signal_to_0_1_interval(self):
+        self.x -= np.amin(self.x)
+        self.x = self.x / np.amax(self.x)
+
+    def normalize(self):
+        self.x = (self.x - np.mean(self.x))/np.std(self.x)
+
+    def to_unit_norm(self):
+        self.x = self.x/np.linalg.norm(self.x)
+
+    def plot(self):
+        self.G.set_coordinates(kind='community2D')
+        self.G.plot_signal(self.x)
+        plt.show()
+
+class DifussedSparseGS(RandomGraphSignal):
+    def  __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
+        RandomGraphSignal.__init__(self, G)
         self.n_deltas = n_deltas
         self.random_sparse_s(min_d, max_d)
         self.random_diffusing_filter(L)
         self.x = np.asarray(self.H.dot(self.s))
-        self.x_n = None
         
     """
     Create random sparsee signal s composed of different deltas placed in the different
@@ -93,17 +115,7 @@ class DifussedSparseGraphSignal():
         S = self.G.W.todense()
         for l in range(L):
             self.H += hs[l]*np.linalg.matrix_power(S,l)
-        #self.H = self.H/np.linalg.norm(self.H,'fro')
 
-    def signal_to_0_1_interval(self):
-        self.x -= np.amin(self.x)
-        self.x = self.x / np.amax(self.x)
-
-    def normalize(self):
-        self.x = (self.x - np.mean(self.x))/np.std(self.x)
-
-    def to_unit_norm(self):
-        self.x = self.x/np.linalg.norm(self.x)
 
 # NOTE: maybe should use inheritance instead of selecting the 'algorithm'?
 # NOTE: maybe descendance and hier_A should boh be lists, no dictionaries
@@ -178,6 +190,7 @@ class MultiRessGraphClustering():
             N = self.clusters_size[i]
             self.hier_A.append(np.zeros((N, N)))
 
+            inter_clust_links = 0
             for j in range(N-1):
                 nodes_c1 = np.where(self.labels[i] == j+1)[0]
                 for k in range(j+1,N):
@@ -187,8 +200,11 @@ class MultiRessGraphClustering():
                     if up_method == 'binary' and np.sum(sub_A) > 0:
                         self.hier_A[i][j,k] = self.hier_A[i][k,j] = 1
                     if up_method == 'weighted':
-                        self.hier_A[i][j,k] = np.sum(sub_A)/(len(nodes_c1)*len(nodes_c2))
+                        self.hier_A[i][j,k] = np.sum(sub_A)
                         self.hier_A[i][k,j] = self.hier_A[i][j,k]
+                        inter_clust_links += np.sum(sub_A)
+            if up_method == 'weighted':
+                self.hier_A[i] = self.hier_A[i]/inter_clust_links
         return self.hier_A
 
     def plot_labels(self):

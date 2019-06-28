@@ -93,7 +93,6 @@ class GraphDeepDecoder():
                 best_net =  copy.deepcopy(self.model)
 
         self.model = best_net
-        print("BEST MSE: ", best_mse)
         return self.model(self.input).detach().numpy(), best_mse
 
     def count_params(self):
@@ -108,6 +107,9 @@ class GraphUpsampling(nn.Module):
         self.descendance = descendance
         self.parent_size = parent_size
         self.A = A
+        if A is not None:
+            D_inv = np.linalg.inv(np.diag(np.sum(self.A,0)))
+            self.A_mean = D_inv.dot(self.A)
         self.method = method
         self.gamma = gamma
         self.child_size = len(descendance)
@@ -130,10 +132,11 @@ class GraphUpsampling(nn.Module):
         if self.method == 'no_A':
             output = parents_val
         elif self.method == 'binary':
-            neigbours_val = torch.Tensor(self.A/np.sum(self.A,0)).mm(parents_val)
+            neigbours_val = torch.Tensor(self.A_mean).mm(parents_val)
+#            neigbours_val = torch.Tensor(self.A/np.sum(self.A,0)).mm(parents_val)
             output = self.gamma*parents_val + (1-self.gamma)*neigbours_val
         elif self.method == 'weighted':
-            neigbours_val = torch.Tensor(self.A).mm(parents_val)
+            neigbours_val = torch.Tensor(self.A_mean).mm(parents_val)
             output =  self.gamma*parents_val + (1-self.gamma)*neigbours_val
         elif self.method == 'original':
             sf = self.child_size/self.parent_size
