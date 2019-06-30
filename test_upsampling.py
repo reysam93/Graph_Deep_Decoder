@@ -4,7 +4,7 @@ signal from noise.
 """
 
 import sys, os
-import time
+import time, datetime
 from multiprocessing import Pool 
 sys.path.insert(0, 'graph_deep_decoder')
 from graph_deep_decoder import utils
@@ -16,17 +16,17 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 # Tuning parameters
-n_signals = 50
-L = 5
-n_p = 0.1 # SNR = 1/n_p
+n_signals = 200
+L = 6
+n_p = 0 # SNR = 1/n_p
 type_z = 'alternated'
 batch_norm = True
 t = [4, 16, 64, 256] # Max clusters
 c_method = 'maxclust' # 'maxclust' or 'distance'
 alg = 'spectral_clutering'
 linkage = 'average'
-n_chans = [2,2,2]
-last_act_fun = nn.Tanh()
+n_chans = [3,3,3]
+last_act_fun = nn.Sigmoid()
 
 
 # Constants
@@ -52,7 +52,7 @@ def compute_clusters(k):
 def test_upsampling(x, sizes, descendances, hier_As):
     mse_est = np.zeros(N_SCENARIOS)
     mse_fit = np.zeros(N_SCENARIOS)
-    x_n = utils.DifussedSparseGraphSignal.add_noise(x, n_p)
+    x_n = utils.RandomGraphSignal.add_noise(x, n_p)
     for i in range(N_SCENARIOS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=n_chans, upsampling=UPSAMPLING[i][0], 
@@ -71,7 +71,7 @@ def print_results(mean_mse, mean_mse_fit):
         print('{}. (UPSAMPLING: {}) '.format(i, UPSAMPLING[i]))
         print('\tMean MSE: {}\tMSE fit {}'.format(mean_mse[i], mean_mse_fit[i]))
 
-def save_results(mse_est, mse_fit, G_params):
+def save_results(mse_est, mse_fit, G_params, n_p):
     if not os.path.isdir('./results/test_ups'):
         os.makedirs('./results/test_ups')
 
@@ -81,8 +81,9 @@ def save_results(mse_est, mse_fit, G_params):
             'G_params': G_params, 'linkage': linkage, 'n_chans': n_chans,
             'mse_est': mse_est, 'mse_fit': mse_fit}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    np.save('./results/test_ups/ups_' + timestamp, data)
-
+    path = './results/test_ups/ups_pn_{}_{}'.format(n_p, timestamp)
+    np.save(path, data)
+    print('SAVED as:', path)
 
 if __name__ == '__main__':
     # Graph parameters
@@ -91,13 +92,13 @@ if __name__ == '__main__':
     G_params['N'] = N = 256
     G_params['k'] = 4
     G_params['p'] = 0.15
-    G_params['q'] = 0.01/k
+    G_params['q'] = 0.01/4
 
     # Set seeds
-    utils.DifussedSparseGraphSignal.set_seed(SEED)
+    utils.RandomGraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
-    G = utils.create_graph(G_params, type_z)   
+    G = utils.create_graph(G_params, SEED, type_z)   
     sizes, descendances, hier_As = compute_clusters(G_params['k'])
     
     start_time = time.time()
@@ -105,7 +106,7 @@ if __name__ == '__main__':
     mse_est = np.zeros((n_signals, N_SCENARIOS))
     with Pool() as pool:
         for i in range(n_signals):
-            signal = utils.DifussedSparseGraphSignal(G,L,G_params['k'])
+            signal = utils.DifussedSparseGS(G,L,G_params['k'])
             signal.to_unit_norm()
             
             result = pool.apply_async(test_upsampling,
@@ -117,4 +118,4 @@ if __name__ == '__main__':
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
     print_results(np.mean(mse_est, axis=0), np.mean(mse_fit, axis=0))
-    save_results(mse_est, mse_fit, G_params)
+    save_results(mse_est, mse_fit, G_params, n_p)

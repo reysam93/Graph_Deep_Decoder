@@ -18,8 +18,8 @@ import torch.nn as nn
 # Tuning parameters
 n_signals = 200
 L = 6
-n_p = 0 # SNR = 1/n_p
-batch_norm = True #True
+n_p = 0.01 # SNR = 1/n_p
+batch_norm = False #True
 act_fun = nn.ReLU()
 up_method = 'weighted'
 last_act_fun = nn.Sigmoid() #nn.Tanh()
@@ -88,8 +88,9 @@ def save_results(error, mse_fit, n_params, G_params, n_p):
             'up_method': up_method, 'last_act_fun': last_act_fun, 'G_params': G_params,
             'mse_est': error, 'mse_fit': mse_fit, 'n_params': n_params}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    np.save('./results/test_arch/arch_pn_{}_{}'.format(n_p, timestamp), data)
-
+    path = './results/test_arch/arch_pn_{}_{}'.format(n_p, timestamp)
+    np.save(path, data)
+    print('SAVED as:',path)
 
 if __name__ == '__main__':
     # Graph parameters
