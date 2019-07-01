@@ -11,27 +11,27 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 # Constants
-N_SIGNALS = 2#100 
+N_SIGNALS = 100 
 SEED = 15
-N_P = [0, 0.01]#[0, .01, .05, .1, .2, .3 .5]
+N_P = [0, .01, .05, .1, .2, .3, .5]
 EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
-#               {'ups': 'no_A', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
-#               {'ups': 'weighted', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': 0},
+               {'ups': 'no_A', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
+               {'ups': 'weighted', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': 0},
                {'ups': 'weighted', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': .75},
-#               {'ups': 'original', 'arch': [6,6,6], 't': [4,16,64,None], 'gamma': None},
-#               {'ups': 'no_A', 'arch': [6,6,6], 't': [4,16,64,None], 'gamma': None},
-#               {'ups': 'weighted', 'arch': [6,6,6], 't': [4,16,64,None], 'gamma': 0},
-#               {'ups': 'weighted', 'arch': [6,6,6], 't': [4,16,64,None], 'gamma': .75},
-#               {'ups': 'original', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': None},
-#               {'ups': 'no_A', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': None},
-#               {'ups': 'weighted', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': 0},
+               {'ups': 'original', 'arch': [6,6,6], 't': [4,16,64,None], 'gamma': None},
+               {'ups': 'no_A', 'arch': [6,6,6], 't': [4,16,64,None], 'gamma': None},
+               {'ups': 'weighted', 'arch': [6,6,6], 't': [4,16,64,None], 'gamma': 0},
+               {'ups': 'weighted', 'arch': [6,6,6], 't': [4,16,64,None], 'gamma': .75},
+               {'ups': 'original', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': None},
+               {'ups': 'no_A', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': None},
+               {'ups': 'weighted', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': 0},
                {'ups': 'weighted', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': .75},]
 
 FMTS = ['o-', '^-', '+-', 'x-', 'o--', '^--', '+--', 'x--', 'o:', '^:', '+:', 'x:']
 
 G_PARAMS = [{'type': 'SBM','N': 256,'k': 4,'p': 0.15,'q': 0.01/4},]
-#            {'type': 'SBM','N': 512,'k': 4,'p': 0.075,'q': 0.001},
-#            {'type': 'SBM','N': 1024,'k': 10,'p': 0.1,'q': 0.0005}]
+            {'type': 'SBM','N': 512,'k': 4,'p': 0.075,'q': 0.001},
+            {'type': 'SBM','N': 1024,'k': 10,'p': 0.1,'q': 0.0005}]
 
 def compute_clusters(G, root_clust):
     sizes = []
