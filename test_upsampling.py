@@ -18,7 +18,7 @@ import torch.nn as nn
 # Tuning parameters
 n_signals = 200
 L = 6
-n_p = 0 # SNR = 1/n_p
+n_p = 0.01 # SNR = 1/n_p
 type_z = 'alternated'
 batch_norm = True
 t = [4, 16, 64, 256] # Max clusters
@@ -61,14 +61,16 @@ def test_upsampling(x, sizes, descendances, hier_As):
 
         dec.build_network()
         x_est, mse_fit[i] = dec.fit(x_n)
-        
+
         error[i] = np.sum(np.square(x-x_est))/np.linalg.norm(x)
+        print('\tScenario {}: Error: {:.4f}'
+                            .format(i, error[i]))
     mse_fit = mse_fit/np.linalg.norm(x_n)*x_n.size
     return error, mse_fit
 
 def print_results(mean_mse, mean_mse_fit):
     for i in range(N_SCENARIOS):
-        print('{}. (UPSAMPLING: {}) '.format(i, UPSAMPLING[i]))
+        print('{}. (UPSAMPLING: {}) '.format(i+1, UPSAMPLING[i]))
         print('\tMean MSE: {}\tMSE fit {}'.format(mean_mse[i], mean_mse_fit[i]))
 
 def save_results(mse_est, mse_fit, G_params, n_p):
@@ -114,6 +116,7 @@ if __name__ == '__main__':
                                         args=[signal.x, sizes, descendances, hier_As])
 
         for i in range(n_signals):
+            print('Signal',i)
             mse_est[i,:], mse_fit[i,:] = result.get()
 
     # Print result:

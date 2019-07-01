@@ -20,17 +20,26 @@ EXPERIMENTS = [{'ups': 'original', 'arch': [2,2,2], 't': [4,16,64,None], 'gamma'
 
 fmts = ['o-', '^-', '+-', 'x-', 'o--', '^--', '+--', 'x--', 'o:', '^:', '+:', 'x:']
 
-def plot_results(mean_mse):
+def plot_results(mean_mse, median_mse):
     plt.figure()
     for i in range(len(EXPERIMENTS)):
         plt.plot(N_P, mean_mse[:,i], fmts[i])
-    
     plt.xlabel('Noise Power')
     plt.ylabel('Mean MSE')
+    plt.title('Mean MSE')
+    legend = [str(exp) for exp in EXPERIMENTS]
+    plt.legend(legend)
+
+    plt.figure()
+    for i in range(len(EXPERIMENTS)):
+        plt.plot(N_P, median_mse[:,i], fmts[i])
+    plt.xlabel('Noise Power')
+    plt.ylabel('Mean MSE')
+    plt.title('Median MSE')
     legend = [str(exp) for exp in EXPERIMENTS]
     plt.legend(legend)
 
 
 mse = np.load(path + file_name)
-plot_results(np.mean(mse, axis=1))
+plot_results(np.mean(mse, axis=1), np.median(mse, axis=1))
 plt.show()
