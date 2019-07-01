@@ -111,7 +111,6 @@ if __name__ == '__main__':
         for i, n_p in enumerate(N_P):    
             with Pool() as pool:
                 for j in range(N_SIGNALS):
-                    print('Signal',i)
                     signal = utils.DifussedSparseGS(G,data['L'],g_params['k'])
                     signal.signal_to_0_1_interval()
                     signal.to_unit_norm()
@@ -120,7 +119,8 @@ if __name__ == '__main__':
                                         data['last_act_fn'], data['batch_norm']])
                 for j in range(N_SIGNALS):
                     mse_est[i,j,:], n_params = result.get()
-
+                    print('Signal',j)
+                    
             print_results(g_params['N'], np.mean(mse_est[i,:,:], axis=0), n_params, n_p)
         plot_results(np.mean(mse_est, axis=1))
         data['mse'] = mse_est

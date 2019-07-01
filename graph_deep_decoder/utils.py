@@ -78,8 +78,13 @@ class RandomGraphSignal():
         self.G.plot_signal(self.x)
         plt.show()
 
+class DeterministicGS(RandomGraphSignal):
+    def __init__(self, G, x):
+       RandomGraphSignal.__init__(self, G)
+       self.x = x 
+
 class DifussedSparseGS(RandomGraphSignal):
-    def  __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
+    def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
         RandomGraphSignal.__init__(self, G)
         self.n_deltas = n_deltas
         self.random_sparse_s(min_d, max_d)
