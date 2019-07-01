@@ -50,7 +50,7 @@ def compute_clusters(k):
     return sizes, descendances, hier_As
 
 def test_upsampling(x, sizes, descendances, hier_As):
-    mse_est = np.zeros(N_SCENARIOS)
+    error = np.zeros(N_SCENARIOS)
     mse_fit = np.zeros(N_SCENARIOS)
     x_n = utils.RandomGraphSignal.add_noise(x, n_p)
     for i in range(N_SCENARIOS):
@@ -62,9 +62,9 @@ def test_upsampling(x, sizes, descendances, hier_As):
         dec.build_network()
         x_est, mse_fit[i] = dec.fit(x_n)
         
-        mse_est[i] = np.mean(np.square(x-x_est))/np.linalg.norm(x)
-    mse_fit = mse_fit/np.linalg.norm(x_n)
-    return mse_est, mse_fit
+        error[i] = np.sum(np.square(x-x_est))/np.linalg.norm(x)
+    mse_fit = mse_fit/np.linalg.norm(x_n)*x_n.size
+    return error, mse_fit
 
 def print_results(mean_mse, mean_mse_fit):
     for i in range(N_SCENARIOS):
@@ -107,6 +107,7 @@ if __name__ == '__main__':
     with Pool() as pool:
         for i in range(n_signals):
             signal = utils.DifussedSparseGS(G,L,G_params['k'])
+            signal.signal_to_0_1_interval()
             signal.to_unit_norm()
             
             result = pool.apply_async(test_upsampling,
