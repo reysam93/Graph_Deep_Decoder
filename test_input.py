@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 # Constants
-N_SIGNALS = 2 
+N_SIGNALS = 200 
 SEED = 15
 n_p = 0
 
@@ -67,16 +67,18 @@ def test_input(id, signals, sizes, descendances, hier_As, n_p, last_act_fn, batc
     return error
 
 def print_results(mean_mse, median_mse, n_p):
-    for i, exp in enumerate(EXPERIMENTS):
-        print('{}. (EXP {}) '.format(i, exp))
-        print('\tMean MSE: {}\tMedian MSE: {}'
+    for i, s_in in enumerate(INPUTS):
+        for j, exp in enumerate(EXPERIMENTS):
+            cont = i*len(EXPERIMENTS)+j
+            print('{}. INPUT: {} EXP: {}'.format(cont+1, s_in, exp))
+            print('\tMean MSE: {}\tMedian MSE: {}'
                             .format(mean_mse[i], median_mse[i]))
 
 def save_results(data):
     if not os.path.isdir('./results/test_input'):
         os.makedirs('./results/test_input')
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    path = './results/test_input/input_{}'.format(timestamp)
+    path = './results/test_input/input_n_p_{}_{}'.format(n_p, timestamp)
     np.save(path, data)
     print('SAVED as:', path)
 
