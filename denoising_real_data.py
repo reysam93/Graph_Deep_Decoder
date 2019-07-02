@@ -14,7 +14,7 @@ DATASET_PATH = 'dataset/graphs.mat'
 MAX_SIGNALS = 100
 MIN_SIZE = 75
 ATTR = 6
-N_P = [0, .01, .05, .1, .2, .3, .5]
+N_P = [0, .05, .1, .2, .3, .5]
 EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
                {'ups': 'no_A', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
                {'ups': 'weighted', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': 0.5},
@@ -109,7 +109,9 @@ def save_results(mse_est):
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
     data = {'mse': mse_est, 'EXPERIMENTS': EXPERIMENTS, 'N_P': N_P,
             'SEED': SEED, 'FMTS': FMTS}
-    np.save('./results/denoising/denoise_real_' + timestamp, data)
+    path = './results/denoising/denoise_real_' + timestamp
+    np.save(path, data)
+    print('SAVED as:', path)
 
 if __name__ == '__main__':
     # Set seeds

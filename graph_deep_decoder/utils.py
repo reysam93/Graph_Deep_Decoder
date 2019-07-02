@@ -73,10 +73,11 @@ class RandomGraphSignal():
     def to_unit_norm(self):
         self.x = self.x/np.linalg.norm(self.x)
 
-    def plot(self):
+    def plot(self, show=True):
         self.G.set_coordinates(kind='community2D')
         self.G.plot_signal(self.x)
-        plt.show()
+        if show:
+            plt.show()
 
 class DeterministicGS(RandomGraphSignal):
     def __init__(self, G, x):
@@ -90,7 +91,7 @@ class DifussedSparseGS(RandomGraphSignal):
         self.random_sparse_s(min_d, max_d)
         self.random_diffusing_filter(L)
         self.x = np.asarray(self.H.dot(self.s))
-        
+
     """
     Create random sparsee signal s composed of different deltas placed in the different
     communities of the graph, which is supposed to follow an SBM
@@ -111,7 +112,7 @@ class DifussedSparseGS(RandomGraphSignal):
             self.s[selected_node] = delta_values[comm_i]
 
     """
-    Create a random diffusing filter with L random coefficients  
+    Create a lineal random diffusing filter with L random coefficients  
     """
     def random_diffusing_filter(self, L):
         # NOTE: One filter or one per comm??
@@ -121,6 +122,49 @@ class DifussedSparseGS(RandomGraphSignal):
         for l in range(L):
             self.H += hs[l]*np.linalg.matrix_power(S,l)
 
+
+class NonLinealDSGS(DifussedSparseGS):
+    def __init__(self, G, L, n_deltas, D=None, min_d=-1, max_d=1):
+        if D == None:
+            self.D = dijkstra(G.W)
+        else:
+            self.D = D
+        DifussedSparseGS.__init__(self,G,L,n_deltas,min_d,max_d)
+
+    """
+    Create a non-linear random diffusing filter with L random coefficients.
+    Assumes the graph is binary
+    """
+    def random_diffusing_filter(self, L):
+        decay_coeff = 0.9
+        self.H = np.zeros(self.G.W.shape)
+        for l in range(L):
+            L_Neighbours = np.zeros(self.G.W.shape)
+            L_Neighbours[self.D==l] = 1
+            self.H += np.power(decay_coeff,l)*L_Neighbours
+
+class MedianDSGS(DifussedSparseGS):
+    def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
+        DifussedSparseGS.__init__(self,G,L,n_deltas,min_d,max_d)
+        self.median_neighbours_nodes()
+
+    def median_neighbours_nodes(self):
+        for i in range(self.G.N):
+            _, neighbours = np.asarray(self.G.W.todense()[i,:]!=0).nonzero()
+            self.x[neighbours] = np.median(self.x[neighbours])
+
+class NLCombinationsDSGS(DifussedSparseGS):
+    def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
+        DifussedSparseGS.__init__(self,G,L,n_deltas,min_d,max_d)
+        self.nl_combs = [np.min, np.mean, np.median, np.max]
+        self.nl_combinations_comm_nodes()
+
+    def nl_combinations_comm_nodes(self):
+        for i in range(self.G.N):
+            comm = self.G.info['node_com'][i]
+            nonlinearity = self.nl_combs[comm % len(self.nl_combs)]
+            _, neighbours = np.asarray(self.G.W.todense()[i,:]!=0).nonzero()
+            self.x[neighbours] = nonlinearity(self.x[neighbours])
 
 # NOTE: maybe should use inheritance instead of selecting the 'algorithm'?
 # NOTE: maybe descendance and hier_A should boh be lists, no dictionaries

@@ -13,7 +13,7 @@ import torch.nn as nn
 # Constants
 N_SIGNALS = 100 
 SEED = 15
-N_P = [0, .01, .05, .1, .2, .3, .5]
+N_P = [0, .05, .1, .2, .3, .5]
 EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
                {'ups': 'no_A', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
                {'ups': 'weighted', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': 0},
@@ -120,7 +120,7 @@ if __name__ == '__main__':
                 for j in range(N_SIGNALS):
                     mse_est[i,j,:], n_params = result.get()
                     print('Signal',j)
-                    
+
             print_results(g_params['N'], np.mean(mse_est[i,:,:], axis=0), n_params, n_p)
         plot_results(np.mean(mse_est, axis=1))
         data['mse'] = mse_est
