@@ -24,8 +24,8 @@ alg = 'spectral_clutering'
 batch_norm = True #True
 up_method = 'weighted'
 gamma = 0.5
-n_chans = [2,2,2]
-last_act_fun = nn.Tanh()
+n_chans = [3,3,3]
+last_act_fun = nn.Sigmoid()
 
 # Constants
 SEED = 15
@@ -110,6 +110,7 @@ if __name__ == '__main__':
     with Pool() as pool:
         for i in range(n_signals):
             signal = utils.DifussedSparseGS(G,L,G_params['k'])
+            signal.signal_to_0_1_interval()
             signal.to_unit_norm()
             result = pool.apply_async(test_resolution,
                                         args=[i, signal.x, sizes, descendances, hier_As])
