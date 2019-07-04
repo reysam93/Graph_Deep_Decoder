@@ -123,10 +123,9 @@ class DifussedSparseGS(GraphSignal):
         for l in range(L):
             self.H += hs[l]*np.linalg.matrix_power(S,l)
 
-
 class NonLinealDSGS(DifussedSparseGS):
     def __init__(self, G, L, n_deltas, D=None, min_d=-1, max_d=1):
-        if D is not None:
+        if D is None:
             self.D = dijkstra(G.W)
         else:
             self.D = D
