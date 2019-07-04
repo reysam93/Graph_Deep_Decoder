@@ -77,14 +77,14 @@ class GraphDeepDecoder():
             mask_var = Variable(torch.Tensor(mask))
 
         # It is needed as a torch variable
-        signal_var = Variable(torch.Tensor(signal))
+        signal_var = Variable(torch.Tensor(signal)).view([1, 1, signal.size])
         best_net = copy.deepcopy(self.model)
         best_mse = 1000000.0
 
         for i in range(n_iter):
             def closure():
                 optimizer.zero_grad()
-                out = self.model(self.input)
+                out = self.model(self.input)#.view(signal_var.shape)
 
                 # Choose metric loss depending on the problem
                 if mask is not None: # Inpainting
