@@ -18,9 +18,9 @@ import torch.nn as nn
 # Tuning parameters
 n_signals = 200
 L = 6
-n_p = 0.01 # SNR = 1/n_p
+n_p = 0 # SNR = 1/n_p
 type_z = 'alternated'
-batch_norm = True
+batch_norm = False
 t = [4, 16, 64, 256] # Max clusters
 c_method = 'maxclust' # 'maxclust' or 'distance'
 alg = 'spectral_clutering'
@@ -49,7 +49,7 @@ def compute_clusters(k):
 
     return sizes, descendances, hier_As
 
-def test_upsampling(x, sizes, descendances, hier_As):
+def test_upsampling(id, x, sizes, descendances, hier_As):
     error = np.zeros(N_SCENARIOS)
     mse_fit = np.zeros(N_SCENARIOS)
     x_n = utils.RandomGraphSignal.add_noise(x, n_p)
@@ -62,16 +62,16 @@ def test_upsampling(x, sizes, descendances, hier_As):
         dec.build_network()
         x_est, mse_fit[i] = dec.fit(x_n)
 
-        error[i] = np.sum(np.square(x-x_est))/np.linalg.norm(x)
-        print('\tScenario {}: Error: {:.4f}'
-                            .format(i, error[i]))
+        error[i] = np.sum(np.square(x-x_est))/np.square(np.linalg.norm(x))
+        print('Signal: {} Scenario {}: Error: {:.4f}'
+                            .format(id, i+1, error[i]))
     mse_fit = mse_fit/np.linalg.norm(x_n)*x_n.size
     return error, mse_fit
 
-def print_results(mean_mse, mean_mse_fit):
+def print_results(mean_mse, median_mse):
     for i in range(N_SCENARIOS):
         print('{}. (UPSAMPLING: {}) '.format(i+1, UPSAMPLING[i]))
-        print('\tMean MSE: {}\tMSE fit {}'.format(mean_mse[i], mean_mse_fit[i]))
+        print('\tMean MSE: {}\tMedian MSE: {}'.format(mean_mse[i], median_mse[i]))
 
 def save_results(mse_est, mse_fit, G_params, n_p):
     if not os.path.isdir('./results/test_ups'):
@@ -113,13 +113,13 @@ if __name__ == '__main__':
             signal.to_unit_norm()
             
             result = pool.apply_async(test_upsampling,
-                                        args=[signal.x, sizes, descendances, hier_As])
+                                        args=[i, signal.x, sizes,
+                                                descendances, hier_As])
 
         for i in range(n_signals):
-            print('Signal',i)
             mse_est[i,:], mse_fit[i,:] = result.get()
 
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
-    print_results(np.mean(mse_est, axis=0), np.mean(mse_fit, axis=0))
+    print_results(np.mean(mse_est, axis=0), np.median(mse_est, axis=0))
     save_results(mse_est, mse_fit, G_params, n_p)

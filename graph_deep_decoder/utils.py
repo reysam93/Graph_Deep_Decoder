@@ -47,14 +47,15 @@ def create_graph(ps, seed=None, type_z='alternated'):
     else:
         raise RuntimeError('Unknown graph type')
 
-class RandomGraphSignal():
+class GraphSignal():
     @staticmethod
     def set_seed(seed):
         np.random.seed(seed)
 
     @staticmethod
     def add_noise(x, n_p):
-        return x + np.random.randn(x.size)*np.sqrt(n_p/x.size)
+        x_p = np.square(np.linalg.norm(x))
+        return x + np.random.randn(x.size)*np.sqrt(n_p*x_p/x.size)
 
     # NOTE: make static method for giving objct
     # from desired signal class?
@@ -79,14 +80,14 @@ class RandomGraphSignal():
         if show:
             plt.show()
 
-class DeterministicGS(RandomGraphSignal):
+class DeterministicGS(GraphSignal):
     def __init__(self, G, x):
-       RandomGraphSignal.__init__(self, G)
+       GraphSignal.__init__(self, G)
        self.x = x 
 
-class DifussedSparseGS(RandomGraphSignal):
+class DifussedSparseGS(GraphSignal):
     def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
-        RandomGraphSignal.__init__(self, G)
+        GraphSignal.__init__(self, G)
         self.n_deltas = n_deltas
         self.random_sparse_s(min_d, max_d)
         self.random_diffusing_filter(L)
@@ -125,7 +126,7 @@ class DifussedSparseGS(RandomGraphSignal):
 
 class NonLinealDSGS(DifussedSparseGS):
     def __init__(self, G, L, n_deltas, D=None, min_d=-1, max_d=1):
-        if D == None:
+        if D is not None:
             self.D = dijkstra(G.W)
         else:
             self.D = D

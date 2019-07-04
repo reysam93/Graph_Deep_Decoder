@@ -17,7 +17,7 @@ import torch
 import torch.nn as nn
 
 # Tuning parameters
-n_signals = 50
+n_signals = 200
 L = 5
 n_p = 0.1 # SNR = 1/n_p
 alg = 'spectral_clutering'
@@ -55,20 +55,19 @@ def compute_clusters(k):
 
     return sizes, descendances, hier_As
 
-def test_resolution(x, sizes, descendances, hier_As):
+def test_resolution(id, x, sizes, descendances, hier_As):
     mse_est = np.zeros(N_SCENARIOS)
-    mse_fit = np.zeros(N_SCENARIOS)
-    x_n = utils.DifussedSparseGraphSignal.add_noise(x, n_p)
+    x_n = utils.GraphSignal.add_noise(x, n_p)
     for i in range(N_SCENARIOS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=n_chans, upsampling=up_method, batch_norm=batch_norm,
                         last_act_fun=last_act_fun, gamma=gamma)
         dec.build_network()
-        x_est, mse_fit[i] = dec.fit(x_n)
+        x_est, _ = dec.fit(x_n)
         
-        mse_est[i] = np.mean(np.square(x-x_est))/np.linalg.norm(x)
-    mse_fit = mse_fit/np.linalg.norm(x_n)
-    return mse_est, mse_fit
+        mse_est[i] = np.sum(np.square(x-x_est))/np.square(np.linalg.norm(x))
+        print('Signal: {} Exp: {}: Err: {}'.format(id, i, mse_est[i]))
+    return mse_est
 
 def print_results(mean_mse, mean_mse_fit, clust_sizes):
     for i in range(N_SCENARIOS):
@@ -76,16 +75,18 @@ def print_results(mean_mse, mean_mse_fit, clust_sizes):
         print('\tMean MSE: {}\tClust Sizes: {}\tMSE fit {}'
                             .format(mean_mse[i], clust_sizes[i], mean_mse_fit[i]))
 
-def save_results(mse_est, mse_fit, G_params):
+def save_results(mse_est, G_params):
     if not os.path.isdir('./results/test_res'):
         os.makedirs('./results/test_res')
 
     data = {'SEED': SEED, 'RESOLUTIONS': RESOLUTIONS, 'alg': alg, 'gamma': gamma,
             'n_signals': n_signals, 'L': L, 'n_p': n_p, 'batch_norm': batch_norm,
             'up_method': up_method, 'last_act_fun': last_act_fun, 'G_params': G_params,
-            'mse_est': mse_est, 'mse_fit': mse_fit, 'n_chans': n_chans}
+            'mse_est': mse_est, 'n_chans': n_chans}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    np.save('./results/test_res/res_' + timestamp, data)
+    path = './results/test_res/res_n_p_{}_{}'.format(n_p, timestamp)
+    np.save(path, data)
+    print('SAVED as:', path)
 
 if __name__ == '__main__':
     # Graph parameters
@@ -97,7 +98,7 @@ if __name__ == '__main__':
     G_params['q'] = 0.01/4
 
     # Set seeds
-    utils.DifussedSparseGraphSignal.set_seed(SEED)
+    utils.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     G = utils.create_graph(G_params)    
@@ -108,10 +109,10 @@ if __name__ == '__main__':
     mse_est = np.zeros((n_signals, N_SCENARIOS))
     with Pool() as pool:
         for i in range(n_signals):
-            signal = utils.DifussedSparseGraphSignal(G,L,G_params['k'])
+            signal = utils.DifussedSparseGS(G,L,G_params['k'])
             signal.to_unit_norm()
             result = pool.apply_async(test_resolution,
-                                        args=[signal.x, sizes, descendances, hier_As])
+                                        args=[i, signal.x, sizes, descendances, hier_As])
 
         for i in range(n_signals):
             mse_est[i,:], mse_fit[i,:] = result.get()
@@ -119,4 +120,4 @@ if __name__ == '__main__':
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
     print_results(np.mean(mse_est, axis=0), np.mean(mse_fit, axis=0), sizes)
-    save_results(mse_est, mse_fit, G_params)
+    save_results(mse_est, G_params)

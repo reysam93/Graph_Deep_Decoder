@@ -5,7 +5,7 @@ from multiprocessing import Pool
 sys.path.insert(0, 'graph_deep_decoder')
 from graph_deep_decoder import utils
 from graph_deep_decoder.architecture import GraphDeepDecoder
-
+from scipy.sparse.csgraph import dijkstra
 import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn as nn
@@ -13,7 +13,7 @@ import torch.nn as nn
 # Constants
 N_SIGNALS = 200 
 SEED = 15
-n_p = 0
+n_p = 0.5
 
 INPUTS = ['linear', 'non-linear', 'median', 'comb']
 EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,256]},
@@ -34,11 +34,11 @@ def compute_clusters(G, root_clust):
         hier_As.append(cluster.compute_hierarchy_A(exp['ups']))
     return sizes, descendances, hier_As
 
-def create_signal(signal_type, G, L, k):
+def create_signal(signal_type, G, L, k, D):
     if signal_type == 'linear':
         signal = utils.DifussedSparseGS(G,L,k)
     elif signal_type == 'non-linear':
-        signal = utils.NonLinealDSGS(G,L,k)
+        signal = utils.NonLinealDSGS(G,L,k,D)
     elif signal_type == 'median':
         signal = utils.MedianDSGS(G,L,k)
     elif signal_type == 'comb':
@@ -53,7 +53,7 @@ def test_input(id, signals, sizes, descendances, hier_As, n_p, last_act_fn, batc
     error = np.zeros(N_EXPS)
 
     for i,x in enumerate(signals):
-        x_n = utils.RandomGraphSignal.add_noise(x, n_p)
+        x_n = utils.GraphSignal.add_noise(x, n_p)
         for j, exp in enumerate(EXPERIMENTS):
             cont = i*len(EXPERIMENTS)+j
             dec = GraphDeepDecoder(descendances[j], hier_As[j], sizes[j],
@@ -72,7 +72,7 @@ def print_results(mean_mse, median_mse, n_p):
             cont = i*len(EXPERIMENTS)+j
             print('{}. INPUT: {} EXP: {}'.format(cont+1, s_in, exp))
             print('\tMean MSE: {}\tMedian MSE: {}'
-                            .format(mean_mse[i], median_mse[i]))
+                            .format(mean_mse[cont], median_mse[cont]))
 
 def save_results(data):
     if not os.path.isdir('./results/test_input'):
@@ -89,6 +89,7 @@ if __name__ == '__main__':
     data['batch_norm'] = True
     data['EXPERIMENTS'] = EXPERIMENTS
     data['INPUTS'] = INPUTS
+    data['n_p'] = n_p
     
     # Graph parameters
     G_params = {}
@@ -99,18 +100,19 @@ if __name__ == '__main__':
     G_params['q'] = 0.01/k
 
     # Set seeds
-    utils.RandomGraphSignal.set_seed(SEED)
+    utils.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     start_time = time.time()
     G = utils.create_graph(G_params, seed=SEED)
+    D = dijkstra(G.W)
     sizes, descendances, hier_As = compute_clusters(G, G_params['k'])
     data['g_params'] = G_params
 
     error = np.zeros((N_SIGNALS, N_EXPS))
     with Pool() as pool:
         for j in range(N_SIGNALS):
-            signals = [create_signal(s_in,G,L,k).x for s_in in INPUTS]
+            signals = [create_signal(s_in,G,L,k,D).x for s_in in INPUTS]
             result = pool.apply_async(test_input,
                         args=[j, signals, sizes, descendances, hier_As, n_p,
                                 data['last_act_fn'], data['batch_norm']])

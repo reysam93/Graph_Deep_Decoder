@@ -103,7 +103,7 @@ if __name__ == '__main__':
     method = 'maxclust'
     
     # Set seeds
-    utils.RandomGraphSignal.set_seed(SEED)
+    utils.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     G = utils.create_graph(G_params)

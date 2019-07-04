@@ -16,17 +16,17 @@ import torch.nn as nn
 
 
 # Tuning parameters
-n_signals = 50
-L = 5
+n_signals = 200
+L = 6
 n_p = 0.1 # SNR = 1/n_p
 batch_norm = True #True
-up_method = 'weighted'
+up_method = 'original'
 t = [4, 16, 64, None]
 c_method = 'maxclust' # 'maxclust' or 'distance'
 alg = 'spectral_clutering'
 link = 'average'
-n_chans = [2,2,2]
-last_act_fun = nn.Tanh()
+n_chans = [3,3,3]
+last_act_fun = nn.Sigmoid()#nn.Tanh()
 gamma = 0.5
 
 # Constants
@@ -40,6 +40,7 @@ G_PARAMS = [{'type': 'SBM','N': 256,'k': 2,'p': 0.1,'q': 0.01/4},
           {'type': 'SBM','N': 1024,'k': 2,'p': 0.05,'q': 0.00075},
           {'type': 'SBM','N': 1024,'k': 4,'p': 0.075,'q': 0.0005},
           {'type': 'SBM','N': 1024,'k': 10,'p': 0.1,'q': 0.0005},
+          {'type': 'ER','N': 128,'k': 4,'p': 0.05},
           {'type': 'ER','N': 256,'k': 4,'p': 0.05},
           {'type': 'ER','N': 512,'k': 4,'p': 0.025},
           {'type': 'ER','N': 1024,'k': 4,'p': 0.01}]
@@ -63,51 +64,52 @@ def compute_clusters(Gs):
 def compute_signals(Gs):
     signals = []
     for i, G in enumerate(Gs):
-        signal = utils.DifussedSparseGraphSignal(G,L,G_PARAMS[i]['k'],-1,1)
+        signal = utils.DifussedSparseGS(G,L,G_PARAMS[i]['k'],-1,1)
+        signal.signal_to_0_1_interval()
         signal.to_unit_norm()
         signals.append(signal.x)
     return signals
 
-def test_graphs(signals, sizes, descendances, hier_As):
+def test_graphs(id, signals, sizes, descendances, hier_As):
     mse_est = np.zeros(N_SCENARIOS)
     mse_fit = np.zeros(N_SCENARIOS)
     for i in range(N_SCENARIOS):
         x = signals[i]
-        x_n = utils.DifussedSparseGraphSignal.add_noise(x, n_p)
+        x_n = utils.GraphSignal.add_noise(x, n_p)
 
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=n_chans, upsampling=up_method, batch_norm=batch_norm,
                         last_act_fun=last_act_fun, gamma=gamma)
         dec.build_network()
         x_est, mse_fit[i] = dec.fit(x_n)
-        mse_est[i] = np.mean(np.square(x-x_est))/np.linalg.norm(x)
-    mse_fit = mse_fit/np.linalg.norm(x_n)
-    return mse_est, mse_fit
+        mse_est[i] = np.sum(np.square(x-x_est))/np.square(np.linalg.norm(x))
+        print('Signal {}: Graph: {}: Mean Error: {}'.format(id, i+1, mse_est[i]))
 
-def print_results(mean_mse, mean_mse_fit, clust_sizes):
+    return mse_est
+
+def print_results(mean_mse, median_mse, clust_sizes):
     for i in range(N_SCENARIOS):
         print('{}. (GRAPH: {}) '.format(i, G_PARAMS[i]))
-        print('\tMean MSE: {}\tClust Sizes: {}\tMSE fit {}'
-                            .format(mean_mse[i], clust_sizes[i], mean_mse_fit[i]))
+        print('\tMean MSE: {}\tClust Sizes: {}Median MSE: {}'
+                            .format(mean_mse[i], clust_sizes[i], median_mse[i]))
 
-def save_results(mse_est, mse_fit, n_params, G_params):
+def save_results(mse_est):
     if not os.path.isdir('./results/test_graph'):
         os.makedirs('./results/test_graph')
 
     data = {'SEED': SEED, 'G_PARAMS': G_PARAMS, 't': t, 'c_method': c_method, 'alg': alg,
             'n_signals': n_signals, 'L': L, 'n_p': n_p, 'batch_norm': batch_norm,
             'up_method': up_method, 'last_act_fun': last_act_fun, 'link': link,
-            'n_chans': n_chans, 'gamma': gamma, 'mse_est': mse_est, 'mse_fit': mse_fit}
+            'n_chans': n_chans, 'gamma': gamma, 'mse_est': mse_est}
     
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    np.save('./results/test_graph/graph_' + timestamp, data)
-
+    path = './results/test_graph/graph_n_p_{}_{}'.format(n_p, timestamp)
+    np.save(path, data)
+    print('SAVED as:', path)
 
 if __name__ == '__main__':
-    input_size = 4
-
     # Set seeds
-    utils.DifussedSparseGraphSignal.set_seed(SEED)
+    utils.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     Gs = [utils.create_graph(G_PARAMS[i], seed=SEED) for i in range(N_SCENARIOS)] 
@@ -120,12 +122,13 @@ if __name__ == '__main__':
         for i in range(n_signals):
             signals = compute_signals(Gs)
             result = pool.apply_async(test_graphs, 
-                                        args=[signals, sizes, descendances, hier_As])
+                                        args=[i, signals, sizes,
+                                                descendances, hier_As])
 
         for i in range(n_signals):
-            mse_est[i,:], mse_fit[i,:] = result.get()
+            mse_est[i,:] = result.get()
 
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
-    print_results(np.mean(mse_est, axis=0), np.mean(mse_fit, axis=0), sizes)
-    save_results(mse_est, mse_fit, n_params, G_params)
+    print_results(np.mean(mse_est, axis=0), np.median(mse_est, axis=0), sizes)
+    save_results(mse_est)
