@@ -57,6 +57,12 @@ class GraphSignal():
         x_p = np.square(np.linalg.norm(x))
         return x + np.random.randn(x.size)*np.sqrt(n_p*x_p/x.size)
 
+    @staticmethod
+    def generate_inpaint_mask(x, p_miss):
+        mask = np.ones(x.size)
+        mask[np.random.choice(x.size, int(x.size*p_miss))] = 0
+        return mask
+
     # NOTE: make static method for giving objct
     # from desired signal class?
     def __init__(self, G):

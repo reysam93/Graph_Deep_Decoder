@@ -67,12 +67,15 @@ class GraphDeepDecoder():
     def add_layer(self, module):
         self.model.add_module(str(len(self.model) + 1), module)
 
-    def fit(self, signal, n_iter=2000):
+    def fit(self, signal, mask=None, n_iter=2000):
         p = [x for x in self.model.parameters() ]
 
         optimizer = torch.optim.Adam(p, lr=0.01)
         mse = torch.nn.MSELoss()
-        
+
+        if mask is not None:
+            mask_var = Variable(torch.Tensor(mask))
+
         # It is needed as a torch variable
         signal_var = Variable(torch.Tensor(signal))
         best_net = copy.deepcopy(self.model)
@@ -82,7 +85,12 @@ class GraphDeepDecoder():
             def closure():
                 optimizer.zero_grad()
                 out = self.model(self.input)
-                loss = mse(out, signal_var)
+
+                # Choose metric loss depending on the problem
+                if mask is not None: # Inpainting
+                    loss = mse(out*mask_var, signal_var*mask_var)
+                else: # Denoising or compression
+                    loss = mse(out, signal_var)
                 loss.backward()                
                 return loss
 
