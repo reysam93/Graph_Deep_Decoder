@@ -19,7 +19,7 @@ import torch.nn as nn
 # Tuning parameters
 n_signals = 200
 L = 5
-n_p = 0.1 # SNR = 1/n_p
+n_p = 0 # SNR = 1/n_p
 alg = 'spectral_clutering'
 batch_norm = True #True
 up_method = 'weighted'
@@ -41,7 +41,6 @@ RESOLUTIONS = [['maxclust', [4, 8, 16, 256], 4],
                 ['distance',  [1, .3, .15, 0], 2]]
 N_SCENARIOS = len(RESOLUTIONS)
 
-# NOTE: compute_clusters is always the same..., only changing the arguments it uses (?)
 def compute_clusters(k):
     sizes = []
     descendances = []
@@ -116,7 +115,7 @@ if __name__ == '__main__':
                                         args=[i, signal.x, sizes, descendances, hier_As])
 
         for i in range(n_signals):
-            mse_est[i,:], mse_fit[i,:] = result.get()
+            mse_est[i,:] = result.get()
 
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
