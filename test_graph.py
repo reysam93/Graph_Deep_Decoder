@@ -4,7 +4,7 @@ Check the efect of the graph
 
 import sys, os
 import time, datetime
-from multiprocessing import Pool 
+from multiprocessing import Pool, cpu_count
 sys.path.insert(0, 'graph_deep_decoder')
 from graph_deep_decoder import utils
 from graph_deep_decoder.architecture import GraphDeepDecoder
@@ -118,7 +118,7 @@ if __name__ == '__main__':
     start_time = time.time()
     mse_fit = np.zeros((n_signals, N_SCENARIOS))
     mse_est = np.zeros((n_signals, N_SCENARIOS))
-    with Pool() as pool:
+    with Pool(processes=cpu_count()) as pool:
         for i in range(n_signals):
             signals = compute_signals(Gs)
             result = pool.apply_async(test_graphs, 

@@ -5,7 +5,7 @@ parameters which represent the signal
 
 import sys, os
 import time, datetime
-from multiprocessing import Pool 
+from multiprocessing import Pool, cpu_count
 sys.path.insert(0, 'graph_deep_decoder')
 from graph_deep_decoder import utils
 from graph_deep_decoder.architecture import GraphDeepDecoder
@@ -111,7 +111,7 @@ if __name__ == '__main__':
     
     start_time = time.time()
     error = np.zeros((n_signals, N_SCENARIOS))
-    with Pool() as pool:
+    with Pool(processes=cpu_count()) as pool:
         for i in range(n_signals):
             signal = utils.DeterministicGS(G,np.random.randn(N))
             signal.signal_to_0_1_interval()

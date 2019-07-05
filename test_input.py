@@ -1,7 +1,7 @@
 import sys
 import os
 import time, datetime
-from multiprocessing import Pool 
+from multiprocessing import Pool, cpu_count
 sys.path.insert(0, 'graph_deep_decoder')
 from graph_deep_decoder import utils
 from graph_deep_decoder.architecture import GraphDeepDecoder
@@ -110,7 +110,7 @@ if __name__ == '__main__':
     data['g_params'] = G_params
 
     error = np.zeros((N_SIGNALS, N_EXPS))
-    with Pool() as pool:
+    with Pool(processes=cpu_count()) as pool:
         for j in range(N_SIGNALS):
             signals = [create_signal(s_in,G,L,k,D).x for s_in in INPUTS]
             result = pool.apply_async(test_input,

@@ -5,7 +5,7 @@ parameters which represent the signal
 
 import sys, os
 import time, datetime
-from multiprocessing import Pool 
+from multiprocessing import Pool, cpu_count 
 sys.path.insert(0, 'graph_deep_decoder')
 from graph_deep_decoder import utils
 from graph_deep_decoder.architecture import GraphDeepDecoder
@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 # Tuning parameters
-n_signals = 200
+n_signals = 5
 L = 6
 n_p = 0.1 # SNR = 1/n_p
 batch_norm = True #True
@@ -60,7 +60,7 @@ def compute_clusters(G, alg, k):
         hier_As.append(cluster.compute_hierarchy_A(up_method))
     return sizes, descendances, hier_As
 
-def test_architecture(id, x, sizes, descendances, hier_As):
+def test_architecture(id, x, sizes, descendances, hier_As):    
     error = np.zeros(N_SCENARIOS)
     mse_fit = np.zeros(N_SCENARIOS)
     params = np.zeros(N_SCENARIOS)
@@ -120,12 +120,12 @@ if __name__ == '__main__':
 
     start_time = time.time()
     error = np.zeros((n_signals, N_SCENARIOS))
-    with Pool() as pool:
+    
+    with Pool(processes=cpu_count()) as pool:
         for i in range(n_signals):
             signal = utils.DifussedSparseGS(G,L,G_params['k'])
             signal.signal_to_0_1_interval()
             signal.to_unit_norm()
-
             result = pool.apply_async(test_architecture,
                                         args=[i, signal.x, sizes,
                                                 descendances, hier_As])

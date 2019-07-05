@@ -18,7 +18,7 @@ import torch.nn as nn
 # Tuning parameters
 n_signals = 200
 L = 5
-n_p = 0 # SNR = 1/n_p
+n_p = 0.1 # SNR = 1/n_p
 batch_norm = True #True
 up_method = 'weighted'
 t = [4, 16, 64, 256] # Max clusters
@@ -89,14 +89,6 @@ def save_results(mse_est, n_p, G_params):
     path = './results/test_clust/clust_p_n_{}_{}'.format(n_p, timestamp)
     np.save(path, data)
     print('SAVED as:', path)
-
-
-# Tuning parameters
-t = [4, 16, 64, 256] # Max clusters
-#t = [1, 0.75, 0.5, 0] # relative max distances
-c_method = 'maxclust' # 'maxclust' or 'distance'
-n_chans = [2,2,2]
-last_act_fun = nn.Tanh()
 
 
 if __name__ == '__main__':
