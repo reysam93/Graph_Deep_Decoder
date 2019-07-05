@@ -62,12 +62,15 @@ def denoise(x, sizes, descendances, hier_As, n_p, last_act_fn, batch_norm):
                             .format(i, error[i]))
     return error, params
 
-def print_results(N, mean_mse, params, n_p):
+def print_results(N, mse_est, params, n_p):
+    mean_mse = np.mean(mse_est, axis=0)
+    median = np.median(mse_est, axis=0)
+    std = np.std(mse_est, axis=0)
     print('NOISE POWER:', n_p)
     for i, exp in enumerate(EXPERIMENTS):
         print('{}. (EXP {}) '.format(i, exp))
-        print('\tMean MSE: {}\tParams: {}\tCompression: {}'
-                            .format(mean_mse[i], params[i], N/params[i]))
+        print('\tMean MSE: {}\t Median: {}\tSTD: {}\tParams: {}\tCompression: {}'
+                            .format(mean_mse[i], median[i], std[i], params[i], N/params[i]))
 
 def plot_results(mean_mse):
     plt.figure()
@@ -95,9 +98,10 @@ if __name__ == '__main__':
     data['batch_norm'] = True
     data['FMTS'] = FMTS
     data['EXPERIMENTS'] = EXPERIMENTS
+    data['N_P'] = N_P
 
     # Set seeds
-    utils.RandomGraphSignal.set_seed(SEED)
+    utils.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     start_time = time.time()
@@ -107,6 +111,7 @@ if __name__ == '__main__':
         data['g_params'] = g_params
         print('Graph', g_params)
 
+        results = []
         mse_est = np.zeros((len(N_P), N_SIGNALS, len(EXPERIMENTS)))
         for i, n_p in enumerate(N_P):    
             with Pool() as pool:
@@ -114,14 +119,14 @@ if __name__ == '__main__':
                     signal = utils.DifussedSparseGS(G,data['L'],g_params['k'])
                     signal.signal_to_0_1_interval()
                     signal.to_unit_norm()
-                    result = pool.apply_async(denoise,
+                    results.append(pool.apply_async(denoise,
                                 args=[signal.x, sizes, descendances, hier_As, n_p,
-                                        data['last_act_fn'], data['batch_norm']])
+                                        data['last_act_fn'], data['batch_norm']]))
                 for j in range(N_SIGNALS):
-                    mse_est[i,j,:], n_params = result.get()
+                    mse_est[i,j,:], n_params = results[j].get()
                     print('Signal',j)
 
-            print_results(g_params['N'], np.mean(mse_est[i,:,:], axis=0), n_params, n_p)
+            print_results(g_params['N'], mse_est[i,:,:], n_params, n_p)
         plot_results(np.mean(mse_est, axis=1))
         data['mse'] = mse_est
         save_results(data)

@@ -11,10 +11,24 @@ from pygsp.graphs import Graph
 
 SEED = 15
 DATASET_PATH = 'dataset/graphs.mat'
-MAX_SIGNALS = 100
+MAX_SIGNALS = 2
 MIN_SIZE = 75
 ATTR = 6
-N_P = [0, .05, .1, .2, .3, .5]
+N_P = [0, .1, .3, .5]
+EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
+               {'ups': 'no_A', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
+               {'ups': 'binary', 'arch': [3,3,3], 't': [4,16,32,None], 'gamma': 0},
+               {'ups': 'binary', 'arch': [3,3,3], 't': [4,16,32,None], 'gamma': 0.5},
+               {'ups': 'weighted', 'arch': [3,3,3], 't': [4,16,32,None], 'gamma': 0},
+               {'ups': 'weighted', 'arch': [3,3,3], 't': [4,16,32,None], 'gamma': 0.5},
+               {'ups': 'original', 'arch': [4,4,4,4], 't': [4,16,32,64,None], 'gamma': None},
+               {'ups': 'no_A', 'arch': [4,4,4,4], 't': [4,16,32,64,None], 'gamma': None},
+               {'ups': 'binary', 'arch': [4,4,4,4], 't': [4,8,16,32,None], 'gamma': 0},
+               {'ups': 'binary', 'arch': [4,4,4,4], 't': [4,8,16,32,None], 'gamma': 0.5},
+               {'ups': 'weighted', 'arch': [4,4,4,4], 't': [4,8,16,32,None], 'gamma': 0},
+               {'ups': 'weighted', 'arch': [4,4,4,4], 't': [4,8,16,32,None], 'gamma': 0.5}]
+
+"""
 EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
                {'ups': 'no_A', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
                {'ups': 'weighted', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': 0.5},
@@ -27,6 +41,7 @@ EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma'
                {'ups': 'original', 'arch': [4,4,4,4], 't': [2,8,16,32,None], 'gamma': None},
                {'ups': 'no_A', 'arch': [4,4,4,4], 't': [2,8,16,32,None], 'gamma': None},
                {'ups': 'weighted', 'arch': [4,4,4,4], 't': [2,8,16,32,None], 'gamma': 0.5},]
+"""
 N_EXPS = len(EXPERIMENTS)
 
 FMTS = ['o-', '^-', '+-', 'x-', 'o--', '^--', '+--', 'x--', 'o:', '^:', '+:', 'x:']
@@ -49,7 +64,7 @@ def read_graphs():
         Gs.append(G)
         signals.append(signal)
         
-    print('Graphs readed:', len(Gs))
+    print('Graphs readed:', len(Gs), 'from:',i)
     return Gs, signals
 
 def compute_clusters(Gs):
@@ -73,25 +88,28 @@ def compute_clusters(Gs):
 def denoise_real(id, x, sizes, descendances, hier_As, n_p):
     error = np.zeros(N_EXPS)
     params = np.zeros(N_EXPS)
-    x_n = utils.RandomGraphSignal.add_noise(x, n_p)
+    x_n = utils.GraphSignal.add_noise(x, n_p)
     for i, exp in enumerate(EXPERIMENTS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=exp['arch'], upsampling=exp['ups'],
                         gamma=exp['gamma'], last_act_fun=nn.Sigmoid())
         dec.build_network()
-        x_est, _ = dec.fit(x_n)
-        error[i] = np.sum(np.square(x-x_est))/np.linalg.norm(x)
+        x_est, _ = dec.fit(x_n, n_iter=4000)
+        error[i] = np.sum(np.square(x-x_est))/np.square(np.linalg.norm(x))
         params[i] = dec.count_params()
         print('Signal: {} Scenario {}: Error: {:.4f}'
                             .format(id, i, error[i]))
     return error, params
 
-def print_results(mean_mse, median_mse, params, n_p):
+def print_results(mse_est, params, n_p):
+    mean_mse = np.mean(mse_est, axis=0)
+    median_mse = np.median(mse_est, axis=0)
+    std = np.std(mse_est, axis=0)
     print('NOISE POWER:', n_p)
     for i, exp in enumerate(EXPERIMENTS):
         print('{}. (EXP {}) '.format(i, exp))
-        print('\tMean Error: {}\tMedian Error: {}\tParams: {}'
-                    .format(mean_mse[i], median_mse[i], params[i]))
+        print('\tMean Error: {}\tMedian Error: {}\tSTD: {}\tParams: {}'
+                    .format(mean_mse[i], median_mse[i], std[i], params[i]))
 
 def plot_results(mean_mse):
     plt.figure()
@@ -115,7 +133,7 @@ def save_results(mse_est):
 
 if __name__ == '__main__':
     # Set seeds
-    utils.RandomGraphSignal.set_seed(SEED)
+    utils.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
     
     Gs, signals = read_graphs()
@@ -124,18 +142,18 @@ if __name__ == '__main__':
 
     mse_est = np.zeros((len(N_P), n_signals, N_EXPS))
     start_time = time.time()
+    results = []
     for i, n_p in enumerate(N_P):  
         with Pool() as pool:
             for j in range(n_signals):
-                result = pool.apply_async(denoise_real,
+                results.append(pool.apply_async(denoise_real,
                         args=[j, signals[j].x, sizes[j], descendances[j],
-                                hier_As[j], n_p])
+                                hier_As[j], n_p]))
 
             for j in range(n_signals):
-                    mse_est[i,j,:], n_params = result.get()
+                mse_est[i,j,:], n_params = results[j].get()
 
-        print_results(np.mean(mse_est[i,:,:], axis=0),
-                        np.median(mse_est[i,:,:], axis=0), n_params, n_p)
+        print_results(mse_est[i,:,:], n_params, n_p)
     plot_results(np.mean(mse_est, axis=1))
     save_results(mse_est)
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
