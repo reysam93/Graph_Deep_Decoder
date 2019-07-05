@@ -79,11 +79,14 @@ def test_architecture(id, x, sizes, descendances, hier_As):
                             .format(id, i+1, params[i], error[i]))
     return error, params
 
-def print_results(N, mean_error, params, median_error):
+def print_results(N, err, params):
+    mean_err = np.mean(err,0)
+    median_err = np.median(err,0)
+    std = np.std(error)
     for i in range(N_SCENARIOS):
         print('{}. (CHANS {}, CLUSTS: {}) '.format(i+1, N_CHANS[i], N_CLUSTS[i]))
-        print('\tMean MSE: {}\tParams: {}\tCompression: {}\tMedian MSE: {}'
-                            .format(mean_error[i], params[i], N/params[i], median_error[i]))
+        print('\tMean MSE: {}\tParams: {}\tCompression: {}\tMedian MSE: {}\tSTD: {}'
+                            .format(mean_err[i], params[i], N/params[i], median_err[i], std[i]))
 
 def save_results(error, n_params, G_params, n_p):
     if not os.path.isdir('./results/test_arch'):
@@ -120,22 +123,22 @@ if __name__ == '__main__':
 
     start_time = time.time()
     error = np.zeros((n_signals, N_SCENARIOS))
-    
+    results = []
     with Pool(processes=cpu_count()) as pool:
         for i in range(n_signals):
             signal = utils.DifussedSparseGS(G,L,G_params['k'])
             signal.signal_to_0_1_interval()
             signal.to_unit_norm()
-            result = pool.apply_async(test_architecture,
+            results.append(pool.apply_async(test_architecture,
                                         args=[i, signal.x, sizes,
-                                                descendances, hier_As])
+                                                descendances, hier_As]))
 
         for i in range(n_signals):
-            error[i,:], n_params = result.get()
+            error[i,:], n_params = results[i].get()
 
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
-    print_results(N, np.mean(error, axis=0), n_params, np.median(error, axis=0))
+    print_results(N, error, n_params)
     save_results(error, n_params, G_params, n_p)
     
     

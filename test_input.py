@@ -66,13 +66,16 @@ def test_input(id, signals, sizes, descendances, hier_As, n_p, last_act_fn, batc
                                 .format(id, cont+1, error[cont]))
     return error
 
-def print_results(mean_mse, median_mse, n_p):
+def print_results(error, n_p):
+    mean_mse = np.mean(error, axis=0)
+    median_mse = np.median(error, axis=0)
+    std = np.std(error, axis=0)
     for i, s_in in enumerate(INPUTS):
         for j, exp in enumerate(EXPERIMENTS):
             cont = i*len(EXPERIMENTS)+j
             print('{}. INPUT: {} EXP: {}'.format(cont+1, s_in, exp))
-            print('\tMean MSE: {}\tMedian MSE: {}'
-                            .format(mean_mse[cont], median_mse[cont]))
+            print('\tMean MSE: {}\tMedian MSE: {}\tSTD: {}'
+                            .format(mean_mse[cont], median_mse[cont], std[cont]))
 
 def save_results(data):
     if not os.path.isdir('./results/test_input'):
@@ -110,16 +113,17 @@ if __name__ == '__main__':
     data['g_params'] = G_params
 
     error = np.zeros((N_SIGNALS, N_EXPS))
+    results = []
     with Pool(processes=cpu_count()) as pool:
         for j in range(N_SIGNALS):
             signals = [create_signal(s_in,G,L,k,D).x for s_in in INPUTS]
-            result = pool.apply_async(test_input,
+            results.append(pool.apply_async(test_input,
                         args=[j, signals, sizes, descendances, hier_As, n_p,
-                                data['last_act_fn'], data['batch_norm']])
+                                data['last_act_fn'], data['batch_norm']]))
         for j in range(N_SIGNALS):
-            error[j,:] = result.get()
+            error[j,:] = results[j].get()
 
-    print_results(np.mean(error, axis=0), np.median(error, axis=0), n_p)
+    print_results(error, n_p)
     data['mse'] = error
     save_results(data)
 

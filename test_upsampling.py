@@ -52,7 +52,7 @@ def compute_clusters(k):
 def test_upsampling(id, x, sizes, descendances, hier_As):
     error = np.zeros(N_SCENARIOS)
     mse_fit = np.zeros(N_SCENARIOS)
-    x_n = utils.RandomGraphSignal.add_noise(x, n_p)
+    x_n = utils.GraphSignal.add_noise(x, n_p)
     for i in range(N_SCENARIOS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=n_chans, upsampling=UPSAMPLING[i][0], 
@@ -66,14 +66,17 @@ def test_upsampling(id, x, sizes, descendances, hier_As):
         print('Signal: {} Scenario {}: Error: {:.4f}'
                             .format(id, i+1, error[i]))
     mse_fit = mse_fit/np.linalg.norm(x_n)*x_n.size
-    return error, mse_fit
+    return error
 
-def print_results(mean_mse, median_mse):
+def print_results(mse_est):
+    mean_mse = np.mean(mse_est, axis=0)
+    median_mse = np.median(mse_est, axis=0)
+    std = np.std(mse_est, axis=0)
     for i in range(N_SCENARIOS):
         print('{}. (UPSAMPLING: {}) '.format(i+1, UPSAMPLING[i]))
-        print('\tMean MSE: {}\tMedian MSE: {}'.format(mean_mse[i], median_mse[i]))
+        print('\tMean MSE: {}\tMedian MSE: {}\tSTD: {}'.format(mean_mse[i], median_mse[i], std[i]))
 
-def save_results(mse_est, mse_fit, G_params, n_p):
+def save_results(mse_est, G_params, n_p):
     if not os.path.isdir('./results/test_ups'):
         os.makedirs('./results/test_ups')
 
@@ -81,7 +84,7 @@ def save_results(mse_est, mse_fit, G_params, n_p):
             'n_signals': n_signals, 'L': L, 'n_p': n_p, 'batch_norm': batch_norm,
             'c_method': c_method, 'alg': alg, 'last_act_fun': last_act_fun,
             'G_params': G_params, 'linkage': linkage, 'n_chans': n_chans,
-            'mse_est': mse_est, 'mse_fit': mse_fit}
+            'mse_est': mse_est}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
     path = './results/test_ups/ups_pn_{}_{}'.format(n_p, timestamp)
     np.save(path, data)
@@ -97,29 +100,29 @@ if __name__ == '__main__':
     G_params['q'] = 0.01/4
 
     # Set seeds
-    utils.RandomGraphSignal.set_seed(SEED)
+    utils.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     G = utils.create_graph(G_params, SEED, type_z)   
     sizes, descendances, hier_As = compute_clusters(G_params['k'])
     
     start_time = time.time()
-    mse_fit = np.zeros((n_signals, N_SCENARIOS))
     mse_est = np.zeros((n_signals, N_SCENARIOS))
+    results = []
     with Pool(processes=cpu_count()) as pool:
         for i in range(n_signals):
-            signal = utils.DifussedSparseGS(G,L,G_params['k'])
+            signal = utils.DifussedSparseGS(G,L,G_params['k'])            
             signal.signal_to_0_1_interval()
             signal.to_unit_norm()
             
-            result = pool.apply_async(test_upsampling,
+            results.append(pool.apply_async(test_upsampling,
                                         args=[i, signal.x, sizes,
-                                                descendances, hier_As])
+                                                descendances, hier_As]))
 
         for i in range(n_signals):
-            mse_est[i,:], mse_fit[i,:] = result.get()
+            mse_est[i,:] = results[i].get()
 
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
-    print_results(np.mean(mse_est, axis=0), np.median(mse_est, axis=0))
-    save_results(mse_est, mse_fit, G_params, n_p)
+    print_results(mse_est)
+    save_results(mse_est, G_params, n_p)

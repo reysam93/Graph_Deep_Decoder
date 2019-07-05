@@ -19,7 +19,7 @@ import torch.nn as nn
 # Tuning parameters
 n_signals = 200
 L = 5
-n_p = 0 # SNR = 1/n_p
+n_p = 0.2 # SNR = 1/n_p
 alg = 'spectral_clutering'
 batch_norm = True #True
 up_method = 'weighted'
@@ -68,11 +68,14 @@ def test_resolution(id, x, sizes, descendances, hier_As):
         print('Signal: {} Exp: {}: Err: {}'.format(id, i, mse_est[i]))
     return mse_est
 
-def print_results(mean_mse, mean_mse_fit, clust_sizes):
+def print_results(mse_est, clust_sizes):
+    mean_mse = np.mean(mse_est, axis=0)
+    median = np.median(mse_est, axis=0)
+    std = np.std(mse_est, axis=0)
     for i in range(N_SCENARIOS):
         print('{}. (RES: {}) '.format(i, RESOLUTIONS[i]))
-        print('\tMean MSE: {}\tClust Sizes: {}\tMSE fit {}'
-                            .format(mean_mse[i], clust_sizes[i], mean_mse_fit[i]))
+        print('\tMean MSE: {}\tClust Sizes: {}\tMedian MSE {}\tSTD: {}'
+                            .format(mean_mse[i], clust_sizes[i], median[i], std[i]))
 
 def save_results(mse_est, G_params):
     if not os.path.isdir('./results/test_res'):
@@ -104,20 +107,20 @@ if __name__ == '__main__':
     sizes, descendances, hier_As = compute_clusters(G_params['k'])
 
     start_time = time.time()
-    mse_fit = np.zeros((n_signals, N_SCENARIOS))
     mse_est = np.zeros((n_signals, N_SCENARIOS))
+    results = []
     with Pool(processes=cpu_count()) as pool:
         for i in range(n_signals):
             signal = utils.DifussedSparseGS(G,L,G_params['k'])
             signal.signal_to_0_1_interval()
             signal.to_unit_norm()
-            result = pool.apply_async(test_resolution,
-                                        args=[i, signal.x, sizes, descendances, hier_As])
+            results.append(pool.apply_async(test_resolution,
+                                        args=[i, signal.x, sizes, descendances, hier_As]))
 
         for i in range(n_signals):
-            mse_est[i,:] = result.get()
+            mse_est[i,:] = results[i].get()
 
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
-    print_results(np.mean(mse_est, axis=0), np.mean(mse_fit, axis=0), sizes)
+    print_results(mse_est, sizes)
     save_results(mse_est, G_params)

@@ -71,11 +71,14 @@ def test_clustering(id, x, sizes, descendances, hier_As):
         print('Signal: {} Exp: {}: Err: {}'.format(id, i, mse_est[i]))
     return mse_est
 
-def print_results(mean_mse, median_mse, clust_sizes, max_dists):
+def print_results(err, clust_sizes, max_dists):
+    mean_err = np.mean(err,0)
+    median_err = np.median(err,0)
+    std_err = np.std(err,0)
     for i in range(N_SCENARIOS):
         print('{}. (ALG: {}, LINK: {}) '.format(i, CLUST_ALGS[i][0], CLUST_ALGS[i][1]))
-        print('\tMean MSE: {}\tClust Sizes: {}\tMax Dist: {}\tMedian MSE: {}'
-                            .format(mean_mse[i], clust_sizes[i], max_dists[i], median_mse[i]))
+        print('\tMean MSE: {}\tClust Sizes: {}\tMax Dist: {}\tMedian MSE: {}\tSTD: {}'
+                            .format(mean_err[i], clust_sizes[i], max_dists[i], median_err[i], std_err[i]))
 
 def save_results(mse_est, n_p, G_params):
     if not os.path.isdir('./results/test_clust'):
@@ -84,7 +87,7 @@ def save_results(mse_est, n_p, G_params):
     data = {'SEED': SEED, 'CLUST_ALGS': CLUST_ALGS, 'n_signals': n_signals, 'L': L, 
             'n_p': n_p, 'batch_norm': batch_norm, 'up_method': up_method, 't': t,
             'c_method': c_method, 'n_chans': n_chans, 'last_act_fun': last_act_fun,
-            'G_params': G_params, 'mse_est': mse_est}
+            'G_params': G_params, 'mse': mse_est}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
     path = './results/test_clust/clust_p_n_{}_{}'.format(n_p, timestamp)
     np.save(path, data)
@@ -108,19 +111,20 @@ if __name__ == '__main__':
     sizes, descendances, hier_As, max_dists = compute_clusters(G_params['k'])
 
     start_time = time.time()
-    mse_est = np.zeros((n_signals, N_SCENARIOS))
+    error = np.zeros((n_signals, N_SCENARIOS))
+    results = []
     with Pool() as pool:
         for i in range(n_signals):
             signal = utils.DifussedSparseGS(G,L,G_params['k'])
             signal.signal_to_0_1_interval()
             signal.to_unit_norm()
-            result = pool.apply_async(test_clustering,
-                                        args=[i, signal.x, sizes, descendances, hier_As])
+            results.append(pool.apply_async(test_clustering,
+                                        args=[i, signal.x, sizes, descendances, hier_As]))
 
         for i in range(n_signals):
-            mse_est[i,:] = result.get()
+            error[i,:] = results[i].get()
     
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
-    print_results(np.mean(mse_est, axis=0), np.median(mse_est, axis=0), sizes, max_dists)
-    save_results(mse_est, n_p, G_params)
+    print_results(error, sizes, max_dists)
+    save_results(error, n_p, G_params)

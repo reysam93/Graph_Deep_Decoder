@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 # Tuning parameters
-n_signals = 5
+n_signals = 200
 L = 6
 batch_norm = True #True
 act_fun = nn.ReLU()
@@ -70,11 +70,14 @@ def test_architecture(id, x, sizes, descendances, hier_As):
                             .format(id, i, params[i], error[i]))
     return error, params
 
-def print_results(N, mean_error, params, mean_mse_fit):
+def print_results(N, error, params):
+    mean_error = np.mean(error, axis=0)
+    median = np.median(error, axis=0)
+    std = np.std(error, axis=0)
     for i in range(N_SCENARIOS):
         print('{}. (CHANS {}, CLUSTS: {}) '.format(i+1, N_CHANS[i], N_CLUSTS[i]))
-        print('\tMean MSE: {}\tParams: {}\tCompression: {}\tMEdian MSE: {}'
-                            .format(mean_error[i], params[i], N/params[i], mean_mse_fit[i]))
+        print('\tMean MSE: {}\tParams: {}\tCompression: {}\tMEdian MSE: {}\tSTD: {}'
+                            .format(mean_error[i], params[i], N/params[i], median[i], std[i]))
 
 def save_results(error, n_params, G_params):
     if not os.path.isdir('./results/test_input'):
@@ -111,21 +114,22 @@ if __name__ == '__main__':
     
     start_time = time.time()
     error = np.zeros((n_signals, N_SCENARIOS))
+    results = []
     with Pool(processes=cpu_count()) as pool:
         for i in range(n_signals):
             signal = utils.DeterministicGS(G,np.random.randn(N))
             signal.signal_to_0_1_interval()
-            #signal.to_unit_norm()
-            result = pool.apply_async(test_architecture,
+            signal.to_unit_norm()
+            results.append(pool.apply_async(test_architecture,
                                         args=[i, signal.x, sizes,
-                                                descendances, hier_As])
+                                                descendances, hier_As]))
 
         for i in range(n_signals):
-            error[i,:], n_params = result.get()
+            error[i,:], n_params = results[i].get()
 
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
-    print_results(N, np.mean(error, axis=0), n_params, np.median(error, axis=0))
+    print_results(N, error, n_params)
     save_results(error, n_params, G_params)
     
     

@@ -87,11 +87,14 @@ def test_graphs(id, signals, sizes, descendances, hier_As):
 
     return mse_est
 
-def print_results(mean_mse, median_mse, clust_sizes):
+def print_results(mse, clust_sizes):
+    mean_mse = np.mean(mse, axis=0)
+    median_mse = np.median(mse, axis=0)
+    std_mse = np.std(mse, axis=0)
     for i in range(N_SCENARIOS):
         print('{}. (GRAPH: {}) '.format(i, G_PARAMS[i]))
-        print('\tMean MSE: {}\tClust Sizes: {}Median MSE: {}'
-                            .format(mean_mse[i], clust_sizes[i], median_mse[i]))
+        print('\tMean MSE: {}\tClust Sizes: {}Median MSE: {}\tSTD: {}'
+                            .format(mean_mse[i], clust_sizes[i], median_mse[i], std_mse[i]))
 
 def save_results(mse_est):
     if not os.path.isdir('./results/test_graph'):
@@ -116,19 +119,19 @@ if __name__ == '__main__':
     sizes, descendances, hier_As = compute_clusters(Gs)
     
     start_time = time.time()
-    mse_fit = np.zeros((n_signals, N_SCENARIOS))
     mse_est = np.zeros((n_signals, N_SCENARIOS))
+    results = []
     with Pool(processes=cpu_count()) as pool:
         for i in range(n_signals):
             signals = compute_signals(Gs)
-            result = pool.apply_async(test_graphs, 
+            results.append(pool.apply_async(test_graphs, 
                                         args=[i, signals, sizes,
-                                                descendances, hier_As])
+                                                descendances, hier_As]))
 
         for i in range(n_signals):
-            mse_est[i,:] = result.get()
+            mse_est[i,:] = results[i].get()
 
     # Print result:
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
-    print_results(np.mean(mse_est, axis=0), np.median(mse_est, axis=0), sizes)
+    print_results(mse_est, sizes)
     save_results(mse_est)

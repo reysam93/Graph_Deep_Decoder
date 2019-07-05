@@ -72,12 +72,15 @@ def test_input(id, x, sizes, descendances, hier_As, p_miss,
                             .format(id, i+1, error[i]))
     return error, clean_error
 
-def print_results(mean_mse, median_mse, mean_clean_err, p_miss):
+def print_results(error, mean_clean_err, p_miss):
+    mean_mse = np.mean(error, axis=0)
+    median_mse = np.median(error, axis=0)
+    std = np.std(error, axis=0)
     print('Clean Err: {} (p_miss: {})'.format(mean_clean_err, p_miss))
     for i, exp in enumerate(EXPERIMENTS):
         print('{}. EXP: {}'.format(i+1, exp))
-        print('\tMean MSE: {}\tMedian MSE: {}'
-                        .format(mean_mse[i], median_mse[i]))
+        print('\tMean MSE: {}\tMedian MSE: {}\tSTD: {}'
+                        .format(mean_mse[i], median_mse[i], std[i]))
 
 def save_results(data):
     if not os.path.isdir('./results/test_inpaint'):
@@ -115,16 +118,17 @@ if __name__ == '__main__':
 
     error = np.zeros((N_SIGNALS, N_EXPS))
     clean_err = np.zeros(N_SIGNALS)
+    results = []
     with Pool(processes=cpu_count()) as pool:
         for j in range(N_SIGNALS):
             x = create_signal(data['input'],G,L,k).x
-            result = pool.apply_async(test_input,
+            results.append(pool.apply_async(test_input,
                         args=[j, x, sizes, descendances, hier_As, p_miss,
-                                data['last_act_fn'], data['batch_norm']])
+                                data['last_act_fn'], data['batch_norm']]))
         for j in range(N_SIGNALS):
-            error[j,:], clean_err[j] = result.get()
+            error[j,:], clean_err[j] = results[j].get()
 
-    print_results(np.mean(error, axis=0), np.median(error, axis=0), np.median(clean_err), p_miss)
+    print_results(error, np.median(clean_err), p_miss)
     data['mse'] = error
     data['clean_err'] = clean_err
     save_results(data)
