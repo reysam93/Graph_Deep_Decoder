@@ -1,45 +1,24 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-path = 'E:/Documentos/GitHub/Graph_Deep_Decoder/results/'
-file_name = 'denoise_1900_01_01-09_06.npy'
+path = 'E:/Documentos/GitHub/Graph_Deep_Decoder/results/denoising/'
+file_name = 'denoise_N_256_2019_07_01-19_48.npy'
+N_P = [0, 0.01, .05, .1, .2, .3, .5]
 
-N_P = [0, .001, .005, .01, .05, .1, .5]
-EXPERIMENTS = [{'ups': 'original', 'arch': [2,2,2], 't': [4,16,64,None], 'gamma': None},
-               {'ups': 'no_A', 'arch': [2,2,2], 't': [4,16,64,None], 'gamma': None},
-               {'ups': 'weighted', 'arch': [2,2,2], 't': [4,16,64,None], 'gamma': 0},
-               {'ups': 'weighted', 'arch': [2,2,2], 't': [4,16,64,None], 'gamma': .75},
-               {'ups': 'original', 'arch': [6,6,6], 't': [4,16,64,None], 'gamma': None},
-               {'ups': 'no_A', 'arch': [6,6,6], 't': [4,16,64,None], 'gamma': None},
-               {'ups': 'weighted', 'arch': [6,6,6], 't': [4,16,64,None], 'gamma': 0},
-               {'ups': 'weighted', 'arch': [6,6,6], 't': [4,16,64,None], 'gamma': .75},
-               {'ups': 'original', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': None},
-               {'ups': 'no_A', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': None},
-               {'ups': 'weighted', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': 0},
-               {'ups': 'weighted', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': .75},]
-
-fmts = ['o-', '^-', '+-', 'x-', 'o--', '^--', '+--', 'x--', 'o:', '^:', '+:', 'x:']
-
-def plot_results(mean_mse, median_mse):
+def plot_results(data, init, end):
     plt.figure()
-    for i in range(len(EXPERIMENTS)):
-        plt.plot(N_P, mean_mse[:,i], fmts[i])
+    mean_mse = np.mean(data['mse'], axis=1)
+    for i in range(len(data['EXPERIMENTS'][init:end])):
+        plt.semilogy(N_P, mean_mse[:,i], data['FMTS'][init:end][i])
     plt.xlabel('Noise Power')
     plt.ylabel('Mean MSE')
+    plt.grid(True)
     plt.title('Mean MSE')
-    legend = [str(exp) for exp in EXPERIMENTS]
-    plt.legend(legend)
-
-    plt.figure()
-    for i in range(len(EXPERIMENTS)):
-        plt.plot(N_P, median_mse[:,i], fmts[i])
-    plt.xlabel('Noise Power')
-    plt.ylabel('Mean MSE')
-    plt.title('Median MSE')
-    legend = [str(exp) for exp in EXPERIMENTS]
+    legend = [str(exp) for exp in data['EXPERIMENTS'][init:end]]
     plt.legend(legend)
 
 
-mse = np.load(path + file_name)
-plot_results(np.mean(mse, axis=1), np.median(mse, axis=1))
+
+data = np.load(path + file_name).item()
+plot_results(data, 0, 12)
 plt.show()
