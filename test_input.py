@@ -11,14 +11,13 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 # Constants
-N_SIGNALS = 200 
+N_SIGNALS = 100 
 SEED = 15
-n_p = 0.5
+N_P = [0, .1, .2, .3, .4, .5, .6, .7]
 
-INPUTS = ['linear', 'non-linear', 'median', 'comb']
-EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,256]},
-               {'ups': 'no_A', 'arch': [3,3,3], 't': [4,16,64,256]},
-               {'ups': 'binary', 'arch': [3,3,3], 't': [4,16,64,256]},
+INPUTS = ['linear', 'median', 'noise']
+EXPERIMENTS = ['bandlimited',
+               {'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,256]},
                {'ups': 'weighted', 'arch': [3,3,3], 't': [4,16,64,256]}]
 N_EXPS = len(INPUTS)*len(EXPERIMENTS)
 
@@ -27,6 +26,12 @@ def compute_clusters(G, root_clust):
     descendances = []
     hier_As = []
     for exp in EXPERIMENTS:
+        if not isinstance(exp,dict):
+            sizes.append(None)
+            descendances.append(None)
+            hier_As.append(None)
+            continue
+
         exp['t'][-1] = G.N
         cluster = utils.MultiRessGraphClustering(G, exp['t'], root_clust)
         sizes.append(cluster.clusters_size)
@@ -43,24 +48,30 @@ def create_signal(signal_type, G, L, k, D):
         signal = utils.MedianDSGS(G,L,k)
     elif signal_type == 'comb':
         signal = utils.NLCombinationsDSGS(G,L,k)
+    elif signal_type == 'noise':
+        signal = utils.DeterministicGS(G,np.random.randn(G.N))
     else:
         raise RuntimeError('Unknown signal type')
     signal.signal_to_0_1_interval()
     signal.to_unit_norm()
     return signal
 
-def test_input(id, signals, sizes, descendances, hier_As, n_p, last_act_fn, batch_norm):
+def test_input(id, signals, sizes, descendances, hier_As, n_p,
+                last_act_fn, batch_norm, V):
     error = np.zeros(N_EXPS)
 
     for i,x in enumerate(signals):
         x_n = utils.GraphSignal.add_noise(x, n_p)
         for j, exp in enumerate(EXPERIMENTS):
             cont = i*len(EXPERIMENTS)+j
-            dec = GraphDeepDecoder(descendances[j], hier_As[j], sizes[j],
-                            n_channels=exp['arch'], upsampling=exp['ups'],
-                            last_act_fun=last_act_fn, batch_norm=batch_norm)
-            dec.build_network()
-            x_est, _ = dec.fit(x_n)
+            if not isinstance(exp,dict):
+                x_est = utils.bandlimited_model(x_n, V)
+            else:
+                dec = GraphDeepDecoder(descendances[j], hier_As[j], sizes[j],
+                                n_channels=exp['arch'], upsampling=exp['ups'],
+                                last_act_fun=last_act_fn, batch_norm=batch_norm)
+                dec.build_network()
+                x_est, _ = dec.fit(x_n)
             error[cont] = np.sum(np.square(x-x_est))/np.square(np.linalg.norm(x))
             print('Signal: {} Scenario: {} Error: {:.4f}'
                                 .format(id, cont+1, error[cont]))
@@ -77,11 +88,21 @@ def print_results(error, n_p):
             print('\tMean MSE: {}\tMedian MSE: {}\tSTD: {}'
                             .format(mean_mse[cont], median_mse[cont], std[cont]))
 
-def save_results(data):
+def save_partial_results(data, n_p):
+    data['n_p'] = n_p
     if not os.path.isdir('./results/test_input'):
         os.makedirs('./results/test_input')
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
     path = './results/test_input/input_n_p_{}_{}'.format(n_p, timestamp)
+    np.save(path, data)
+    print('SAVED as:', path)
+
+def save_results(data):
+    data['N_P'] = N_P
+    if not os.path.isdir('./results/test_input'):
+        os.makedirs('./results/test_input')
+    timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
+    path = './results/test_input/input_{}'.format(timestamp)
     np.save(path, data)
     print('SAVED as:', path)
 
@@ -92,7 +113,6 @@ if __name__ == '__main__':
     data['batch_norm'] = True
     data['EXPERIMENTS'] = EXPERIMENTS
     data['INPUTS'] = INPUTS
-    data['n_p'] = n_p
     
     # Graph parameters
     G_params = {}
@@ -108,24 +128,26 @@ if __name__ == '__main__':
 
     start_time = time.time()
     G = utils.create_graph(G_params, seed=SEED)
+    G.compute_fourier_basis()
     D = dijkstra(G.W)
     sizes, descendances, hier_As = compute_clusters(G, G_params['k'])
     data['g_params'] = G_params
 
-    error = np.zeros((N_SIGNALS, N_EXPS))
-    results = []
-    with Pool(processes=cpu_count()) as pool:
-        for j in range(N_SIGNALS):
-            signals = [create_signal(s_in,G,L,k,D).x for s_in in INPUTS]
-            results.append(pool.apply_async(test_input,
-                        args=[j, signals, sizes, descendances, hier_As, n_p,
-                                data['last_act_fn'], data['batch_norm']]))
-        for j in range(N_SIGNALS):
-            error[j,:] = results[j].get()
+    error = np.zeros((len(N_P), N_SIGNALS, N_EXPS))
+    for i, n_p in enumerate(N_P):
+        results = []
+        with Pool(processes=cpu_count()) as pool:
+            for j in range(N_SIGNALS):
+                signals = [create_signal(s_in,G,L,k,D).x for s_in in INPUTS]
+                results.append(pool.apply_async(test_input,
+                            args=[j, signals, sizes, descendances, hier_As, n_p,
+                                    data['last_act_fn'], data['batch_norm'], G.U]))
+            for j in range(N_SIGNALS):
+                error[i,j,:] = results[j].get()
 
-    print_results(error, n_p)
-    data['mse'] = error
-    save_results(data)
-
-    print('--- {} minutes ---'.format((time.time()-start_time)/60))
-    plt.show()
+        data['error'] = error[i,:,:]
+        save_partial_results(data, n_p)
+        print_results(error[i,:,:], n_p)
+    
+    save_results(data)   
+    print('--- {} hours ---'.format((time.time()-start_time)/3600))

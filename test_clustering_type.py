@@ -16,9 +16,9 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 # Tuning parameters
-n_signals = 200
+n_signals = 100
 L = 5
-n_p = 0.1 # SNR = 1/n_p
+n_p = 0.2 # SNR = 1/n_p
 batch_norm = True #True
 up_method = 'weighted'
 t = [4, 16, 64, 256] # Max clusters

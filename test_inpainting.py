@@ -11,9 +11,10 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 # Constants
-N_SIGNALS = 200
+N_SIGNALS = 100
 SEED = 15
-p_miss = 0.1
+#p_miss = 0.1
+P_MISS = [.05, .1, .3, .5]
 
 EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,256]},
                {'ups': 'no_A', 'arch': [3,3,3], 't': [4,16,64,256]},
@@ -23,10 +24,10 @@ EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,256]},
                {'ups': 'no_A', 'arch': [6,6,6], 't': [4,16,64,256]},
                {'ups': 'binary', 'arch': [6,6,6], 't': [4,16,64,256]},
                {'ups': 'weighted', 'arch': [6,6,6], 't': [4,16,64,256]},
-               {'ups': 'original', 'arch': [4,4,4,4], 't': [4,16,32,64,256]},
-               {'ups': 'no_A', 'arch': [4,4,4,4], 't': [4,16,32,64,256]},
-               {'ups': 'binary', 'arch': [4,4,4,4], 't': [4,16,32,64,256]},
-               {'ups': 'weighted', 'arch': [4,4,4,4], 't': [4,16,32,64,256]}]
+               {'ups': 'original', 'arch': [3,3,3,3,3,3], 't': [4,8,16,32,64,128,256]},
+               {'ups': 'no_A', 'arch': [3,3,3,3,3,3], 't': [4,8,16,32,64,128,256]},
+               {'ups': 'binary', 'arch': [3,3,3,3,3,3], 't': [4,8,16,32,64,128,256]},
+               {'ups': 'weighted', 'arch': [3,3,3,3,3,3], 't': [4,8,16,32,64,128,256]}]
 N_EXPS = len(EXPERIMENTS)
 
 def compute_clusters(G, root_clust):
@@ -96,7 +97,7 @@ if __name__ == '__main__':
     data['last_act_fn'] = nn.Sigmoid()
     data['batch_norm'] = True
     data['EXPERIMENTS'] = EXPERIMENTS
-    data['p_miss'] = p_miss
+    # data['p_miss'] = p_miss
     data['input'] = 'median'
 
     # Graph parameters
@@ -116,22 +117,27 @@ if __name__ == '__main__':
     sizes, descendances, hier_As = compute_clusters(G, G_params['k'])
     data['g_params'] = G_params
 
-    error = np.zeros((N_SIGNALS, N_EXPS))
-    clean_err = np.zeros(N_SIGNALS)
-    results = []
-    with Pool(processes=cpu_count()) as pool:
-        for j in range(N_SIGNALS):
-            x = create_signal(data['input'],G,L,k).x
-            results.append(pool.apply_async(test_input,
-                        args=[j, x, sizes, descendances, hier_As, p_miss,
-                                data['last_act_fn'], data['batch_norm']]))
-        for j in range(N_SIGNALS):
-            error[j,:], clean_err[j] = results[j].get()
+    # DELETE THIS FOR!
+    for p_miss in P_MISS:
+        data['p_miss'] = p_miss
 
-    print_results(error, np.median(clean_err), p_miss)
-    data['mse'] = error
-    data['clean_err'] = clean_err
-    save_results(data)
+        error = np.zeros((N_SIGNALS, N_EXPS))
+        clean_err = np.zeros(N_SIGNALS)
+        results = []
+        with Pool(processes=cpu_count()) as pool:
+            for j in range(N_SIGNALS):
+                x = create_signal(data['input'],G,L,k).x
+                results.append(pool.apply_async(test_input,
+                            args=[j, x, sizes, descendances, hier_As, p_miss,
+                                    data['last_act_fn'], data['batch_norm']]))
+            for j in range(N_SIGNALS):
+                error[j,:], clean_err[j] = results[j].get()
 
+        data['mse'] = error
+        data['clean_err'] = clean_err
+        save_results(data)
+        print_results(error, np.median(clean_err), p_miss)
+        
+    
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
-    plt.show()
+    #plt.show()

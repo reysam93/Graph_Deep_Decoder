@@ -26,12 +26,11 @@ last_act_fun = nn.Sigmoid()
 # Constants
 SEED = 15
 N_P = [0, .1, .2 , .3, .4, .5, .6, .7]
-
 EXPERIMENTS = [{'n_chans': [6]*3, 'n_clusts': [4,16,64,256]},
-               {'n_chans': [3]*3, 'n_clusts': [4,16,64,256]},
                {'n_chans': [4]*4, 'n_clusts': [4,16,32,64,256]},
-               {'n_chans': [2]*6, 'n_clusts': [4,8,16,32,64,128,256]},
-               {'n_chans': [4,4,3,3,2], 'n_clusts': [4,8,16,32,64,256]}]
+               {'n_chans': [4,4,3,3,2], 'n_clusts': [4,8,16,32,64,256]},
+               {'n_chans': [3]*3, 'n_clusts': [4,16,64,256]},
+               {'n_chans': [2]*6, 'n_clusts': [4,8,16,32,64,128,256]}]
 
 """
 N_CHANS = [[6]*3, [4]*3, [3]*3, [2]*3, [10,5,3],  [4,3,3], [4], [9], [4]*4, [8,6,4,2],
@@ -87,14 +86,14 @@ def print_results(N, err, params):
         print('\tMean MSE: {}\tParams: {}\tCompression: {}\tMedian MSE: {}\tSTD: {}'
                             .format(mean_err[i], params[i], N/params[i], median_err[i], std[i]))
 
-def partial_save_results(error, n_params, G_params, n_p):
+def save_partial_results(error, n_params, G_params, n_p):
     if not os.path.isdir('./results/test_arch'):
         os.makedirs('./results/test_arch')
 
     data = {'SEED': SEED, 'EXPERIMENTS': EXPERIMENTS,
             'n_signals': n_signals, 'L': L, 'n_p': n_p, 'batch_norm': batch_norm,
             'up_method': up_method, 'last_act_fun': last_act_fun, 'G_params': G_params,
-            'mse_est': error, 'n_params': n_params}
+            'mse_est': error, 'n_params': n_params, 'FMTS': FMTS}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
     path = './results/test_arch/arch_pn_{}_{}'.format(n_p, timestamp)
     np.save(path, data)
@@ -107,7 +106,7 @@ def save_results(error, n_params, G_params):
     data = {'SEED': SEED, 'EXPERIMENTS': EXPERIMENTS,
             'n_signals': n_signals, 'L': L, 'N_P': N_P, 'batch_norm': batch_norm,
             'up_method': up_method, 'last_act_fun': last_act_fun, 'G_params': G_params,
-            'mse_est': error, 'n_params': n_params}
+            'error': error, 'n_params': n_params}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
     path = './results/test_arch/arch_{}'.format(timestamp)
     np.save(path, data)
@@ -117,7 +116,7 @@ if __name__ == '__main__':
     # Graph parameters
     G_params = {}
     G_params['type'] = 'SBM' # SBM or ER
-    G_params['N'] = N = 256
+    G_params['N'] = N = 258
     G_params['k'] = k = 4
     G_params['p'] = 0.15
     G_params['q'] = 0.01/k
@@ -150,10 +149,9 @@ if __name__ == '__main__':
                 error[i,j,:], n_params = results[j].get()
 
         # Print result:
-        print('--- {} minutes ---'.format((time.time()-start_time)/60))
-        partial_save_results(error[i,:,:], n_params, G_params, n_p)
+        save_partial_results(error[i,:,:], n_params, G_params, n_p)
         print_results(N, error[i,:,:], n_params)
-
+    print('--- {} hours ---'.format((time.time()-start_time)/3600))
     save_results(error, n_params, G_params)
     
     

@@ -16,11 +16,11 @@ import torch.nn as nn
 
 
 # Tuning parameters
-n_signals = 200
+n_signals = 100
 L = 6
-n_p = 0.1 # SNR = 1/n_p
+n_p = 0 # SNR = 1/n_p
 batch_norm = True #True
-up_method = 'original'
+up_method = 'weighted'
 t = [4, 16, 64, None]
 c_method = 'maxclust' # 'maxclust' or 'distance'
 alg = 'spectral_clutering'

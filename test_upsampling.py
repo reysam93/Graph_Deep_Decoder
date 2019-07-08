@@ -33,7 +33,8 @@ SEED = 15
 N_P = [0, .1, .2 , .3, .4, .5, .6, .7]
 
 EXPERIMENTS = [[None, None], ['original', None], ['no_A', None],
-              ['binary', 0], ['weighted', 0], ['binary', .5], ['weighted', .5]]
+              ['binary', .5], ['weighted', 0], ['weighted', .25],
+              ['weighted', .5], ['weighted', .75]]
 
 """
 EXPERIMENTS = [[None, None], ['original', None], ['no_A', None],
@@ -82,7 +83,7 @@ def print_results(mse_est):
         print('{}. {} '.format(i+1, EXPERIMENTS[i]))
         print('\tMean MSE: {}\tMedian MSE: {}\tSTD: {}'.format(mean_mse[i], median_mse[i], std[i]))
 
-def partial_save_results(error, G_params, n_p):
+def save_partial_results(error, G_params, n_p):
     if not os.path.isdir('./results/test_ups'):
         os.makedirs('./results/test_ups')
 
@@ -144,8 +145,7 @@ if __name__ == '__main__':
                 error[i,j,:] = results[j].get()
 
         # Print result:
-        print('--- {} minutes ---'.format((time.time()-start_time)/60))
-        partial_save_results(error[i,:,:], G_params, n_p)
+        save_partial_results(error[i,:,:], G_params, n_p)
         print_results(error[i,:,:])
-        
+    print('--- {} hours ---'.format((time.time()-start_time)/3600))
     save_results(error, G_params)
