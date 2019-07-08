@@ -43,7 +43,6 @@ def create_graph(ps, seed=None, type_z='random'):
             np.random.shuffle(z)
         else:
             z = None
-        print(z)
         return StochasticBlockModel(N=ps['N'], k=ps['k'], p=ps['p'], z=z,
                                     q=ps['q'], connected=True, seed=seed)
     elif ps['type'] == 'ER':
