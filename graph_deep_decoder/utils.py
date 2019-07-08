@@ -32,20 +32,30 @@ def plot_graph_clusters(G, labels, n_clusts):
         G.plot_signal(labels[i], ax=axes[i])
     plt.show()
 
-def create_graph(ps, seed=None, type_z='alternated'):
+def create_graph(ps, seed=None, type_z='random'):
     if ps['type'] == 'SBM':
         if type_z == 'contiguos':
             z = assign_nodes_to_comms(ps['N'],ps['k'])
         elif type_z == 'alternated':
             z = np.array(list(range(ps['k']))*int(ps['N']/ps['k'])+list(range(ps['N']%ps['k'])))
+        elif type_z == 'random':
+            z = assign_nodes_to_comms(ps['N'],ps['k'])
+            np.random.shuffle(z)
         else:
             z = None
+        print(z)
         return StochasticBlockModel(N=ps['N'], k=ps['k'], p=ps['p'], z=z,
                                     q=ps['q'], connected=True, seed=seed)
     elif ps['type'] == 'ER':
         return ErdosRenyi(N=ps['N'], p=ps['p'], connected=True, seed=seed)
     else:
         raise RuntimeError('Unknown graph type')
+
+def bandlimited_model(x_n, V, comp=4):
+    n_coefs = int(x_n.size/comp)
+    x_f = np.matmul(np.transpose(V),x_n)
+    max_indexes = np.argsort(-np.abs(x_f))[:n_coefs]
+    return np.matmul(V[:,max_indexes], x_f[max_indexes])
 
 class GraphSignal():
     @staticmethod
