@@ -21,6 +21,8 @@ L = 6
 batch_norm = True
 act_fun = nn.ReLU()
 up_method = 'weighted'
+gamma = 0.5
+type_z = 'alternated'
 last_act_fun = nn.Sigmoid()
 
 # Constants
@@ -66,7 +68,7 @@ def test_architecture(id, x, sizes, descendances, hier_As, n_p):
     for i in range(N_EXPS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=EXPERIMENTS[i]['n_chans'], upsampling=up_method, batch_norm=batch_norm,
-                        last_act_fun=last_act_fun, act_fun=act_fun)
+                        last_act_fun=last_act_fun, act_fun=act_fun, gamma=gamma)
 
         dec.build_network()
         x_est, mse_fit[i] = dec.fit(x_n)
@@ -93,7 +95,7 @@ def save_partial_results(error, n_params, G_params, n_p):
     data = {'SEED': SEED, 'EXPERIMENTS': EXPERIMENTS,
             'n_signals': n_signals, 'L': L, 'n_p': n_p, 'batch_norm': batch_norm,
             'up_method': up_method, 'last_act_fun': last_act_fun, 'G_params': G_params,
-            'mse_est': error, 'n_params': n_params, 'FMTS': FMTS}
+            'mse_est': error, 'n_params': n_params}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
     path = './results/test_arch/arch_pn_{}_{}'.format(n_p, timestamp)
     np.save(path, data)
@@ -106,7 +108,7 @@ def save_results(error, n_params, G_params):
     data = {'SEED': SEED, 'EXPERIMENTS': EXPERIMENTS,
             'n_signals': n_signals, 'L': L, 'N_P': N_P, 'batch_norm': batch_norm,
             'up_method': up_method, 'last_act_fun': last_act_fun, 'G_params': G_params,
-            'error': error, 'n_params': n_params}
+            'error': error, 'n_params': n_params, 'gamma': gamma, 'type_z': type_z}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
     path = './results/test_arch/arch_{}'.format(timestamp)
     np.save(path, data)
@@ -116,7 +118,7 @@ if __name__ == '__main__':
     # Graph parameters
     G_params = {}
     G_params['type'] = 'SBM' # SBM or ER
-    G_params['N'] = N = 258
+    G_params['N'] = N = 256
     G_params['k'] = k = 4
     G_params['p'] = 0.15
     G_params['q'] = 0.01/k
@@ -129,8 +131,9 @@ if __name__ == '__main__':
     utils.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
-    G = utils.create_graph(G_params, SEED)
+    G = utils.create_graph(G_params, SEED, type_z=type_z)
     sizes, descendances, hier_As = compute_clusters(G, alg, G_params['k'])
+
 
     start_time = time.time()
     error = np.zeros((len(N_P), n_signals, N_EXPS))
