@@ -11,13 +11,16 @@ from pygsp.graphs import Graph
 
 SEED = 15
 DATASET_PATH = 'dataset/graphs.mat'
-MAX_SIGNALS = 100
-MIN_SIZE = 75
-ATTR = 7
-N_P = [0, .1, .2, .3, .4, .5, .6, .7]
+MAX_SIGNALS = 300
+MIN_SIZE = 50
+ATTR = 6
+N_P = [0, .1, .2, .3, .4, .5, .6]
 EXPERIMENTS = ['bandlimited',
-               {'ups': 'original', 'arch': [3,3,3], 't': [4,16,32,None], 'gamma': None},
-               {'ups': 'weighted', 'arch': [3,3,3], 't': [4,16,32,None], 'gamma': .5}]
+               {'ups': 'original', 'arch': [3,3], 't': [4,16,None], 'gamma': None},
+               {'ups': 'weighted', 'arch': [3,3], 't': [4,16,None], 'gamma': 0.5}]
+BATCH_NORM = True
+LAST_ACT_FUN = nn.Tanh()
+ACT_FUN = nn.Tanh()
 
 """
 EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
@@ -40,6 +43,8 @@ def read_graphs():
     signals = []
     Gs = []
     graphs_mat = loadmat(DATASET_PATH)
+    g_sizes = []
+    cont = 0
     for i, A in  enumerate(graphs_mat['cell_A']):
         if len(signals) >= MAX_SIGNALS:
             break
@@ -48,14 +53,48 @@ def read_graphs():
             continue
         
         signal = utils.DeterministicGS(G, graphs_mat['cell_X'][i][0][:,ATTR])
-        signal.signal_to_0_1_interval()
+        if np.linalg.norm(signal.x) == 0:
+            continue
+        #signal.normalize()
+        #signal.signal_to_0_1_interval()
         signal.to_unit_norm()
         G.compute_fourier_basis()
         Gs.append(G)
+        g_sizes.append(G.N) 
         signals.append(signal)
-        
-    print('Graphs readed:', len(Gs), 'from:',i)
+
+    print('Graphs readed:', len(Gs), 'from:',i, 'mean size:', np.mean(g_sizes), cont)
     return Gs, signals
+
+"""
+def read_graphs2():
+    signals = []
+    Gs = []
+    graphs_mat = loadmat('dataset/all_data_eigA_x7.mat')
+    g_sizes = []
+    for i, x in  enumerate(graphs_mat['XX']):
+        if len(signals) >= MAX_SIGNALS:
+            break
+        V = graphs_mat['VV'][i][0]
+        
+        e = np.diag(graphs_mat['EE'][i][0].flatten())
+        A = np.matmul(np.matmul(V, e),np.transpose(V))
+        np.fill_diagonal(A,0)
+        G = Graph(A)
+        if G.N < 30 or not G.is_connected():
+            continue
+        
+        signal = utils.DeterministicGS(G, x[0].flatten())
+        #signal.signal_to_0_1_interval()
+        signal.to_unit_norm()
+        G.compute_fourier_basis()
+        Gs.append(G)
+        g_sizes.append(G.N) 
+        signals.append(signal)
+
+    print('Graphs readed:', len(Gs), 'from:',i, 'mean size:', np.mean(g_sizes))
+    return Gs, signals
+"""
 
 def compute_clusters(Gs):
     sizes = []
@@ -86,16 +125,19 @@ def denoise_real(id, x, sizes, descendances, hier_As, n_p, V):
     x_n = utils.GraphSignal.add_noise(x, n_p)
     for i, exp in enumerate(EXPERIMENTS):
         if not isinstance(exp,dict):
-            x_est = utils.bandlimited_model(x_n, V)
+            n_params = 48
+            x_est = utils.bandlimited_model(x_n, V, n_coefs=n_params)
         else:
             dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                             n_channels=exp['arch'], upsampling=exp['ups'],
-                            gamma=exp['gamma'], last_act_fun=nn.Sigmoid())
+                            gamma=exp['gamma'], last_act_fun=LAST_ACT_FUN,
+                            act_fun=ACT_FUN, batch_norm=BATCH_NORM)
             dec.build_network()
+            n_params = dec.count_params()
             x_est, _ = dec.fit(x_n, n_iter=4000)
         error[i] = np.sum(np.square(x-x_est))/np.square(np.linalg.norm(x))
-        print('Signal: {} Scenario {}: Error: {:.4f}'
-                            .format(id, i, error[i]))
+        print('Signal: {} Scenario {}: Error: {:.4f}, Params: {}'
+                            .format(id, i, error[i], n_params))
     return error
 
 def print_results(mse_est, n_p):
@@ -113,7 +155,8 @@ def save_results(error):
         os.makedirs('./results/denoising')
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
     data = {'error': error, 'EXPERIMENTS': EXPERIMENTS, 'N_P': N_P,
-            'SEED': SEED}
+            'SEED': SEED, 'natch_norm': BATCH_NORM, 'act_fun': ACT_FUN,
+            'last_act_fun': LAST_ACT_FUN}
     path = './results/denoising/denoise_real_' + timestamp
     np.save(path, data)
     print('SAVED as:', path)
