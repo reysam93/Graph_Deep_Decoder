@@ -50,11 +50,14 @@ def create_graph(ps, seed=None, type_z='random'):
     else:
         raise RuntimeError('Unknown graph type')
 
-def bandlimited_model(x_n, V, comp=4):
-    n_coefs = int(x_n.size/comp)
+def bandlimited_model(x_n, V, n_coefs=63):
+    #n_coefs = int(x_n.size/comp)
     x_f = np.matmul(np.transpose(V),x_n)
-    max_indexes = np.argsort(-np.abs(x_f))[:n_coefs]
-    return np.matmul(V[:,max_indexes], x_f[max_indexes])
+    #max_indexes = np.argsort(-np.abs(x_f))[:n_coefs]
+
+    # Check if signal is bandlmited
+    # return np.matmul(V[:,max_indexes], x_f[max_indexes])
+    return np.matmul(V[:,0:n_coefs], x_f[0:n_coefs])
 
 class GraphSignal():
     @staticmethod
@@ -71,7 +74,7 @@ class GraphSignal():
         mask = np.ones(x.size)
         mask[np.random.choice(x.size, int(x.size*p_miss))] = 0
         return mask
-
+    
     # NOTE: make static method for giving objct
     # from desired signal class?
     def __init__(self, G):
@@ -79,14 +82,40 @@ class GraphSignal():
         self.x = None
         self.x_n = None
 
+
+    """
+    Create a lineal random diffusing filter with L random coefficients  
+    """
+    def random_diffusing_filter(self, L):
+        # NOTE: One filter or one per comm??
+        hs = np.random.rand(L)
+        self.H = np.zeros(self.G.W.shape)
+        S = self.G.W.todense()
+        for l in range(L):
+            self.H += hs[l]*np.linalg.matrix_power(S,l)
+
+    def median_neighbours_nodes(self):
+        x_aux = np.zeros(self.x.shape)
+        for i in range(self.G.N):
+            _, neighbours = np.asarray(self.G.W.todense()[i,:]!=0).nonzero()
+            x_aux[neighbours] = np.median(self.x[neighbours])
+        self.x = x_aux
+
     def signal_to_0_1_interval(self):
-        self.x -= np.amin(self.x)
+        min_x = np.amin(self.x)
+        if min_x < 0:
+            self.x -= np.amin(self.x)
+            print(min_x)
+        
         self.x = self.x / np.amax(self.x)
 
     def normalize(self):
         self.x = (self.x - np.mean(self.x))/np.std(self.x)
 
     def to_unit_norm(self):
+        if np.linalg.norm(self.x) == 0:
+            print("WARNING: signal with norm 0")
+            return
         self.x = self.x/np.linalg.norm(self.x)
 
     def plot(self, show=True):
@@ -127,17 +156,6 @@ class DifussedSparseGS(GraphSignal):
             selected_node = comm_nodes[rand_index]
             self.s[selected_node] = delta_values[comm_i]
 
-    """
-    Create a lineal random diffusing filter with L random coefficients  
-    """
-    def random_diffusing_filter(self, L):
-        # NOTE: One filter or one per comm??
-        hs = np.random.rand(L)
-        self.H = np.zeros(self.G.W.shape)
-        S = self.G.W.todense()
-        for l in range(L):
-            self.H += hs[l]*np.linalg.matrix_power(S,l)
-
 class NonLinealDSGS(DifussedSparseGS):
     def __init__(self, G, L, n_deltas, D=None, min_d=-1, max_d=1):
         if D is None:
@@ -163,11 +181,6 @@ class MedianDSGS(DifussedSparseGS):
         DifussedSparseGS.__init__(self,G,L,n_deltas,min_d,max_d)
         self.median_neighbours_nodes()
 
-    def median_neighbours_nodes(self):
-        for i in range(self.G.N):
-            _, neighbours = np.asarray(self.G.W.todense()[i,:]!=0).nonzero()
-            self.x[neighbours] = np.median(self.x[neighbours])
-
 class NLCombinationsDSGS(DifussedSparseGS):
     def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
         DifussedSparseGS.__init__(self,G,L,n_deltas,min_d,max_d)
@@ -180,6 +193,31 @@ class NLCombinationsDSGS(DifussedSparseGS):
             nonlinearity = self.nl_combs[comm % len(self.nl_combs)]
             _, neighbours = np.asarray(self.G.W.todense()[i,:]!=0).nonzero()
             self.x[neighbours] = nonlinearity(self.x[neighbours])
+
+class NonBLMedian(GraphSignal):
+    def __init__(self, G, min_mean=-1, max_mean=1):
+        GraphSignal.__init__(self,G)
+        self.n_comms = self.G.info['comm_sizes'].size
+        self.x_from_freq()
+        self.median_neighbours_nodes()
+
+    def x_from_freq(self):
+        self.G.compute_fourier_basis()
+        x_freq = np.random.uniform(size=self.G.N)
+        self.x = np.matmul(self.G.U,x_freq)
+        #self.random_diffusing_filter(2)
+        #self.x = np.asarray(self.H.dot(self.x))
+        self.median_neighbours_nodes()
+
+    #def random_comm_noise(self, min_mean, max_mean):
+    #    step = (max_mean-min_mean)/(self.n_comms-1)
+    #    comm_means = np.arange(min_mean, max_mean+0.1, step)
+
+    #    self.x = np.zeros((self.G.N))
+    #    for comm in range(self.n_comms):
+    #        comm_nodes, = np.asarray(self.G.info['node_com']==comm).nonzero()
+    #        self.x[comm_nodes] = np.random.randn(comm_nodes.size)*step/4 + comm_means[comm]
+
 
 # NOTE: maybe should use inheritance instead of selecting the 'algorithm'?
 # NOTE: maybe descendance and hier_A should boh be lists, no dictionaries
@@ -271,19 +309,21 @@ class MultiRessGraphClustering():
                 self.hier_A[i] = self.hier_A[i]/inter_clust_links
         return self.hier_A
 
-    def plot_labels(self):
+    def plot_labels(self, show=True):
         n_labels = len(self.labels)-1
         _, axes= plt.subplots(1, n_labels)
         self.G.set_coordinates()
         for i in range(n_labels):
             self.G.plot_signal(self.labels[i], ax=axes[i])
-        plt.show()
+        if show:    
+            plt.show()
 
-    def plot_hier_A(self):
+    def plot_hier_A(self, show=True):
         _, axes = plt.subplots(2, len(self.hier_A))
         for i in range(len(self.hier_A)):
             G = Graph(self.hier_A[i])
             G.set_coordinates()
             axes[0,i].spy(self.hier_A[i])
             G.plot(ax=axes[1,i])
-        plt.show()
+        if show:
+            plt.show()

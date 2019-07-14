@@ -37,9 +37,7 @@ class GraphDeepDecoder():
         else:
             shape = [1, self.n_channels[0], self.n_clust[-1]]
         self.input = Variable(torch.zeros(shape)).data.normal_()
-        #self.input = Variable(torch.zeros(shape)).data.uniform_()
-
-    # NOTE: Equivalent to original arquitecture
+        
     def build_network(self):
         for l in range(len(self.n_channels)-1):
             conv = nn.Conv1d(self.n_channels[l], self.n_channels[l+1], 
@@ -130,7 +128,7 @@ class GraphUpsampling(nn.Module):
         self.U = torch.Tensor(self.U)#.to_sparse()
 
     def forward(self, input):
-        # TODO: check if making ops with np instead of torch may increase speed
+        # TODO: check if making ops with np instead of torch increase speed
         n_channels = input.shape[1]
         matrix_in = input.view(self.parent_size, n_channels)
 
