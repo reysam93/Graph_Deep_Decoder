@@ -11,11 +11,11 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 # Constants
-N_SIGNALS = 100 
+N_SIGNALS = 100
 SEED = 15
-N_P = [0, .1, .2, .3, .4, .5, .6, .7]
+N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
 
-INPUTS = ['linear', 'median', 'noise']
+INPUTS = ['linear', 'median']
 EXPERIMENTS = ['bandlimited',
                {'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,256]},
                {'ups': 'weighted', 'arch': [3,3,3], 't': [4,16,64,256]}]
@@ -50,6 +50,8 @@ def create_signal(signal_type, G, L, k, D):
         signal = utils.NLCombinationsDSGS(G,L,k)
     elif signal_type == 'noise':
         signal = utils.DeterministicGS(G,np.random.randn(G.N))
+    elif signal_type == 'non-bl':
+        signal = utils.NonBLMedian(G)
     else:
         raise RuntimeError('Unknown signal type')
     signal.signal_to_0_1_interval()
@@ -65,13 +67,13 @@ def test_input(id, signals, sizes, descendances, hier_As, n_p,
         for j, exp in enumerate(EXPERIMENTS):
             cont = i*len(EXPERIMENTS)+j
             if not isinstance(exp,dict):
-                x_est = utils.bandlimited_model(x_n, V)
+                x_est = utils.bandlimited_model(x_n, V, n_coefs=63)
             else:
                 dec = GraphDeepDecoder(descendances[j], hier_As[j], sizes[j],
                                 n_channels=exp['arch'], upsampling=exp['ups'],
                                 last_act_fun=last_act_fn, batch_norm=batch_norm)
                 dec.build_network()
-                x_est, _ = dec.fit(x_n)
+                x_est, _ = dec.fit(x_n, n_iter=3000)
             error[cont] = np.sum(np.square(x-x_est))/np.square(np.linalg.norm(x))
             print('Signal: {} Scenario: {} Error: {:.4f}'
                                 .format(id, cont+1, error[cont]))
@@ -113,6 +115,7 @@ if __name__ == '__main__':
     data['batch_norm'] = True
     data['EXPERIMENTS'] = EXPERIMENTS
     data['INPUTS'] = INPUTS
+    data['type_z'] = 'alternated'
     
     # Graph parameters
     G_params = {}
@@ -127,7 +130,7 @@ if __name__ == '__main__':
     GraphDeepDecoder.set_seed(SEED)
 
     start_time = time.time()
-    G = utils.create_graph(G_params, seed=SEED)
+    G = utils.create_graph(G_params, seed=SEED, type_z=data['type_z'])
     G.compute_fourier_basis()
     D = dijkstra(G.W)
     sizes, descendances, hier_As = compute_clusters(G, G_params['k'])
@@ -146,7 +149,6 @@ if __name__ == '__main__':
                 error[i,j,:] = results[j].get()
 
         data['error'] = error[i,:,:]
-        save_partial_results(data, n_p)
         print_results(error[i,:,:], n_p)
     
     save_results(data)   

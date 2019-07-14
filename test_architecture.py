@@ -27,7 +27,7 @@ last_act_fun = nn.Sigmoid()
 
 # Constants
 SEED = 15
-N_P = [0, .1, .2 , .3, .4, .5, .6, .7]
+N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
 EXPERIMENTS = [{'n_chans': [6]*3, 'n_clusts': [4,16,64,256]},
                {'n_chans': [4]*4, 'n_clusts': [4,16,32,64,256]},
                {'n_chans': [4,4,3,3,2], 'n_clusts': [4,8,16,32,64,256]},
@@ -71,7 +71,7 @@ def test_architecture(id, x, sizes, descendances, hier_As, n_p):
                         last_act_fun=last_act_fun, act_fun=act_fun, gamma=gamma)
 
         dec.build_network()
-        x_est, mse_fit[i] = dec.fit(x_n)
+        x_est, mse_fit[i] = dec.fit(x_n, n_iter=3000)
         
         error[i] = np.sum(np.square(x-x_est))/np.square(np.linalg.norm(x))
         params[i] = dec.count_params()
@@ -145,9 +145,8 @@ if __name__ == '__main__':
                 signal.signal_to_0_1_interval()
                 signal.to_unit_norm()
                 results.append(pool.apply_async(test_architecture,
-                                            args=[j, signal.x, sizes,
-                                                    descendances, hier_As, n_p]))
-
+                                           args=[j, signal.x, sizes,
+                                                descendances, hier_As, n_p]))
             for j in range(n_signals):
                 error[i,j,:], n_params = results[j].get()
 

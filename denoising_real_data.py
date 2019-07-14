@@ -14,13 +14,16 @@ DATASET_PATH = 'dataset/graphs.mat'
 MAX_SIGNALS = 300
 MIN_SIZE = 50
 ATTR = 6
-N_P = [0, .1, .2, .3, .4, .5, .6]
+N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
 EXPERIMENTS = ['bandlimited',
                {'ups': 'original', 'arch': [3,3], 't': [4,16,None], 'gamma': None},
                {'ups': 'weighted', 'arch': [3,3], 't': [4,16,None], 'gamma': 0.5}]
+# Architecture
 BATCH_NORM = True
 LAST_ACT_FUN = nn.Tanh()
 ACT_FUN = nn.Tanh()
+# Bandlimited
+N_PARAMS = 48
 
 """
 EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
@@ -125,8 +128,8 @@ def denoise_real(id, x, sizes, descendances, hier_As, n_p, V):
     x_n = utils.GraphSignal.add_noise(x, n_p)
     for i, exp in enumerate(EXPERIMENTS):
         if not isinstance(exp,dict):
-            n_params = 48
-            x_est = utils.bandlimited_model(x_n, V, n_coefs=n_params)
+            x_est = utils.bandlimited_model(x_n, V, n_coefs=N_PARAMS)
+            n_params = N_PARAMS
         else:
             dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                             n_channels=exp['arch'], upsampling=exp['ups'],

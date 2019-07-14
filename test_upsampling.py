@@ -30,7 +30,7 @@ last_act_fun = nn.Sigmoid()
 
 # Constants
 SEED = 15
-N_P = [0, .1, .2 , .3, .4, .5, .6, .7]
+N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
 
 EXPERIMENTS = [[None, None], ['original', None], ['no_A', None],
               ['binary', .5], ['weighted', 0], ['weighted', .25],
@@ -67,7 +67,7 @@ def test_upsampling(id, x, sizes, descendances, hier_As, n_p):
                         gamma=EXPERIMENTS[i][1])
 
         dec.build_network()
-        x_est, mse_fit[i] = dec.fit(x_n)
+        x_est, mse_fit[i] = dec.fit(x_n, n_iter=3000)
 
         error[i] = np.sum(np.square(x-x_est))/np.square(np.linalg.norm(x))
         print('Signal: {} Scenario {}: Error: {:.4f}'
