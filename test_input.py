@@ -138,6 +138,7 @@ if __name__ == '__main__':
 
     error = np.zeros((len(N_P), N_SIGNALS, N_EXPS))
     for i, n_p in enumerate(N_P):
+        print('Noise:', n_p)
         results = []
         with Pool(processes=cpu_count()) as pool:
             for j in range(N_SIGNALS):
@@ -151,5 +152,6 @@ if __name__ == '__main__':
         data['error'] = error[i,:,:]
         print_results(error[i,:,:], n_p)
     
+    data['error'] = error
     save_results(data)   
     print('--- {} hours ---'.format((time.time()-start_time)/3600))
