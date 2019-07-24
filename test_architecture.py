@@ -138,6 +138,7 @@ if __name__ == '__main__':
     start_time = time.time()
     error = np.zeros((len(N_P), n_signals, N_EXPS))
     for i, n_p in enumerate(N_P):
+        print('Noise:', n_p)
         results = []
         with Pool(processes=cpu_count()) as pool:
             for j in range(n_signals):

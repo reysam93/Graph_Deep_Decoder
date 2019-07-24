@@ -67,7 +67,7 @@ def test_upsampling(id, x, sizes, descendances, hier_As, n_p):
                         gamma=EXPERIMENTS[i][1])
 
         dec.build_network()
-        x_est, mse_fit[i] = dec.fit(x_n, n_iter=3000)
+        x_est, mse_fit[i] = dec.fit(x_n)
 
         error[i] = np.sum(np.square(x-x_est))/np.square(np.linalg.norm(x))
         print('Signal: {} Scenario {}: Error: {:.4f}'
@@ -130,6 +130,7 @@ if __name__ == '__main__':
     start_time = time.time()
     error = np.zeros((len(N_P), n_signals, N_SCENARIOS))
     for i, n_p in enumerate(N_P):
+        print('Noise:', n_p)
         results = []
         with Pool(processes=cpu_count()) as pool:
             for j in range(n_signals):

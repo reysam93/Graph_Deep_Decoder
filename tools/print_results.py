@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-PATH = './results/'
+PATH = '../results/'
 # file_name = 'denoising/denoise_N_256_2019_07_01-19_48.npy'
 
 class ExpPrinter():
@@ -113,15 +113,14 @@ class ExpPrinter():
             print()
 
     def print_denoise(self):
-        print('N_SIGNALS:', self.data['mse'].shape)
-
+        print('N_SIGNALS:', self.data['error'].shape)
         if not 'N_P' in self.data:
             self.data['N_P'] = [0, 0.01, .05, .1, .2, .3, .5]
         
         for j, n_p in enumerate(self.data['N_P']):
             print('NOISE: ', n_p)
-            mean_error = np.mean(self.data['mse'][j,:,:],axis=0)
-            median_error = np.median(self.data['mse'][j,:,:],axis=0)
+            mean_error = np.mean(self.data['error'][j,:,:],axis=0)
+            median_error = np.median(self.data['error'][j,:,:],axis=0)
             for i, exp in enumerate(self.data['EXPERIMENTS']):
                 print('\t{}. {}:'.format(i+1, exp))
                 print('\t\tMean ERROR: {} Median ERROR: {}'.format(mean_error[i], median_error[i]))
@@ -185,12 +184,8 @@ class ExpPrinter():
             print('\tMean ERROR: {}\tMedian ERROR: {}'.format(error, median_error[i]))
 
 if __name__ == "__main__":
-    file_name = 'arch_2019_07_09-01_48'
+    file_name = 'ups_2019_07_08-19_36' #denoise_real_2019_07_11-13_51'
     printer = ExpPrinter(file_name)
     printer.print_summary()
-
-
-#self.data = np.load(path + file_name).item()
-#print_denoise(self.data)
 
 

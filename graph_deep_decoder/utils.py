@@ -43,6 +43,7 @@ def create_graph(ps, seed=None, type_z='random'):
             np.random.shuffle(z)
         else:
             z = None
+        
         return StochasticBlockModel(N=ps['N'], k=ps['k'], p=ps['p'], z=z,
                                     q=ps['q'], connected=True, seed=seed)
     elif ps['type'] == 'ER':
@@ -50,13 +51,11 @@ def create_graph(ps, seed=None, type_z='random'):
     else:
         raise RuntimeError('Unknown graph type')
 
-def bandlimited_model(x_n, V, n_coefs=63):
-    #n_coefs = int(x_n.size/comp)
+def bandlimited_model(x_n, V, n_coefs=63, max_coefs=True):
     x_f = np.matmul(np.transpose(V),x_n)
-    #max_indexes = np.argsort(-np.abs(x_f))[:n_coefs]
-
-    # Check if signal is bandlmited
-    # return np.matmul(V[:,max_indexes], x_f[max_indexes])
+    if max_coefs:
+        max_indexes = np.argsort(-np.abs(x_f))[:n_coefs]
+        return np.matmul(V[:,max_indexes], x_f[max_indexes])        
     return np.matmul(V[:,0:n_coefs], x_f[0:n_coefs])
 
 class GraphSignal():
@@ -76,7 +75,7 @@ class GraphSignal():
         return mask
     
     # NOTE: make static method for giving objct
-    # from desired signal class?
+    # from desired signal class? --> method create_signal
     def __init__(self, G):
         self.G = G
         self.x = None
@@ -98,14 +97,20 @@ class GraphSignal():
         x_aux = np.zeros(self.x.shape)
         for i in range(self.G.N):
             _, neighbours = np.asarray(self.G.W.todense()[i,:]!=0).nonzero()
-            x_aux[neighbours] = np.median(self.x[neighbours])
+            x_aux[i] = np.median(self.x[neighbours])
+        self.x = x_aux
+
+    def mean_neighbours_nodes(self):
+        x_aux = np.zeros(self.x.shape)
+        for i in range(self.G.N):
+            _, neighbours = np.asarray(self.G.W.todense()[i,:]!=0).nonzero()
+            x_aux[i] = np.mean(self.x[neighbours])
         self.x = x_aux
 
     def signal_to_0_1_interval(self):
         min_x = np.amin(self.x)
         if min_x < 0:
             self.x -= np.amin(self.x)
-            print(min_x)
         
         self.x = self.x / np.amax(self.x)
 
@@ -180,6 +185,16 @@ class MedianDSGS(DifussedSparseGS):
     def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
         DifussedSparseGS.__init__(self,G,L,n_deltas,min_d,max_d)
         self.median_neighbours_nodes()
+
+class MeanMedianDSGS(DifussedSparseGS):
+    def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
+        DifussedSparseGS.__init__(self,G,L,n_deltas,min_d,max_d)
+        self.mean_neighbours_nodes()
+        mean_x = self.x        
+        self.median_neighbours_nodes()
+        self.x = self.x * mean_x 
+        #self.x = self.x*x_aux
+        
 
 class NLCombinationsDSGS(DifussedSparseGS):
     def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
@@ -264,7 +279,8 @@ class MultiRessGraphClustering():
 
     def plot_dendrogram(self):
         plt.figure()
-        dendrogram(self.Z)
+        dendrogram(self.Z, orientation='left', no_labels=True)
+        plt.gca().tick_params(labelsize=16)
         plt.show()
 
     def compute_hierarchy_descendance(self):

@@ -11,7 +11,7 @@ from pygsp.graphs import Graph
 
 SEED = 15
 DATASET_PATH = 'dataset/graphs.mat'
-MAX_SIGNALS = 300
+MAX_SIGNALS = 100
 MIN_SIZE = 50
 ATTR = 6
 N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
@@ -47,7 +47,6 @@ def read_graphs():
     Gs = []
     graphs_mat = loadmat(DATASET_PATH)
     g_sizes = []
-    cont = 0
     for i, A in  enumerate(graphs_mat['cell_A']):
         if len(signals) >= MAX_SIGNALS:
             break
@@ -66,38 +65,8 @@ def read_graphs():
         g_sizes.append(G.N) 
         signals.append(signal)
 
-    print('Graphs readed:', len(Gs), 'from:',i, 'mean size:', np.mean(g_sizes), cont)
-    return Gs, signals
-
-"""
-def read_graphs2():
-    signals = []
-    Gs = []
-    graphs_mat = loadmat('dataset/all_data_eigA_x7.mat')
-    g_sizes = []
-    for i, x in  enumerate(graphs_mat['XX']):
-        if len(signals) >= MAX_SIGNALS:
-            break
-        V = graphs_mat['VV'][i][0]
-        
-        e = np.diag(graphs_mat['EE'][i][0].flatten())
-        A = np.matmul(np.matmul(V, e),np.transpose(V))
-        np.fill_diagonal(A,0)
-        G = Graph(A)
-        if G.N < 30 or not G.is_connected():
-            continue
-        
-        signal = utils.DeterministicGS(G, x[0].flatten())
-        #signal.signal_to_0_1_interval()
-        signal.to_unit_norm()
-        G.compute_fourier_basis()
-        Gs.append(G)
-        g_sizes.append(G.N) 
-        signals.append(signal)
-
     print('Graphs readed:', len(Gs), 'from:',i, 'mean size:', np.mean(g_sizes))
     return Gs, signals
-"""
 
 def compute_clusters(Gs):
     sizes = []

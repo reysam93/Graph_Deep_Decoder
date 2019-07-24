@@ -13,7 +13,8 @@ import torch.nn as nn
 # Constants
 N_SIGNALS = 100 
 SEED = 15
-N_P = [0, .05, .1, .2, .3, .5]
+N_P = [0, .5]
+
 EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
                {'ups': 'no_A', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
                {'ups': 'weighted', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': 0},
@@ -26,7 +27,6 @@ EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma'
                {'ups': 'no_A', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': None},
                {'ups': 'weighted', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': 0},
                {'ups': 'weighted', 'arch': [4,4,4,4], 't': [4,16,64,128,None], 'gamma': .75},]
-
 FMTS = ['o-', '^-', '+-', 'x-', 'o--', '^--', '+--', 'x--', 'o:', '^:', '+:', 'x:']
 
 G_PARAMS = [{'type': 'SBM','N': 256,'k': 4,'p': 0.15,'q': 0.01/4},
@@ -111,9 +111,9 @@ if __name__ == '__main__':
         data['g_params'] = g_params
         print('Graph', g_params)
 
-        results = []
         mse_est = np.zeros((len(N_P), N_SIGNALS, len(EXPERIMENTS)))
         for i, n_p in enumerate(N_P):    
+            results = []
             with Pool() as pool:
                 for j in range(N_SIGNALS):
                     signal = utils.DifussedSparseGS(G,data['L'],g_params['k'])
