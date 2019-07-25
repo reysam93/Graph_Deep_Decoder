@@ -2,8 +2,9 @@ import sys
 import os
 import time, datetime
 from multiprocessing import Pool 
-sys.path.insert(0, 'graph_deep_decoder')
+sys.path.insert(0, '../graph_deep_decoder')
 from graph_deep_decoder import utils
+from graph_deep_decoder import graph_signals as gs
 from graph_deep_decoder.architecture import GraphDeepDecoder
 
 import numpy as np
@@ -48,7 +49,7 @@ def compute_clusters(G, root_clust):
 def denoise(x, sizes, descendances, hier_As, n_p, last_act_fn, batch_norm):
     error = np.zeros(len(EXPERIMENTS))
     params = np.zeros(len(EXPERIMENTS))
-    x_n = utils.RandomGraphSignal.add_noise(x, n_p)
+    x_n = gs.GraphSignal.add_noise(x, n_p)
     for i, exp in enumerate(EXPERIMENTS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=exp['arch'], upsampling=exp['ups'],
@@ -101,7 +102,7 @@ if __name__ == '__main__':
     data['N_P'] = N_P
 
     # Set seeds
-    utils.GraphSignal.set_seed(SEED)
+    gs.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     start_time = time.time()
@@ -116,7 +117,7 @@ if __name__ == '__main__':
             results = []
             with Pool() as pool:
                 for j in range(N_SIGNALS):
-                    signal = utils.DifussedSparseGS(G,data['L'],g_params['k'])
+                    signal = gs.DifussedSparseGS(G,data['L'],g_params['k'])
                     signal.signal_to_0_1_interval()
                     signal.to_unit_norm()
                     results.append(pool.apply_async(denoise,

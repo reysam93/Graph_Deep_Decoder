@@ -6,8 +6,9 @@ parameters which represent the signal
 import sys, os
 import time, datetime
 from multiprocessing import Pool, cpu_count
-sys.path.insert(0, 'graph_deep_decoder')
+sys.path.insert(0, '../graph_deep_decoder')
 from graph_deep_decoder import utils
+from graph_deep_decoder import graph_signals as gs
 from graph_deep_decoder.architecture import GraphDeepDecoder
 from pygsp.graphs import StochasticBlockModel, ErdosRenyi
 
@@ -106,7 +107,7 @@ if __name__ == '__main__':
     method = 'maxclust'
     
     # Set seeds
-    utils.GraphSignal.set_seed(SEED)
+    gs.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     G = utils.create_graph(G_params)
@@ -117,7 +118,7 @@ if __name__ == '__main__':
     results = []
     with Pool(processes=cpu_count()) as pool:
         for i in range(n_signals):
-            signal = utils.DeterministicGS(G,np.random.randn(N))
+            signal = gs.DeterministicGS(G,np.random.randn(N))
             signal.signal_to_0_1_interval()
             signal.to_unit_norm()
             results.append(pool.apply_async(test_architecture,

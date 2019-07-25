@@ -21,7 +21,8 @@ L = 5
 n_p = 0.2 # SNR = 1/n_p
 batch_norm = True #True
 up_method = 'weighted'
-t = [4, 16, 64, 256] # Max clusters
+#t = [4, 16, 64, 256] # Max clusters
+t = [2, 4, 7, 14]
 #t = [1, 0.75, 0.5, 0] # relative max distances
 c_method = 'maxclust' # 'maxclust' or 'distance'
 n_chans = [3,3,3]
@@ -29,6 +30,9 @@ last_act_fun = nn.Sigmoid()
 
 # Constants
 SEED = 15
+
+CLUST_ALGS = [['spectral_clutering', 'average']]
+"""
 CLUST_ALGS = [['spectral_clutering', 'single'],
               ['spectral_clutering', 'complete'],
               ['spectral_clutering', 'average'],
@@ -37,6 +41,7 @@ CLUST_ALGS = [['spectral_clutering', 'single'],
               ['distance_clustering', 'complete'],
               ['distance_clustering', 'average'],
               ['distance_clustering', 'ward']]
+"""
 N_SCENARIOS = len(CLUST_ALGS)
 
 
@@ -54,6 +59,10 @@ def compute_clusters(k):
         descendances.append(cluster.compute_hierarchy_descendance())
         hier_As.append(cluster.compute_hierarchy_A(up_method))
         max_dists.append(cluster.Z[:,2][-k]/cluster.Z[:,2][-1])
+
+        cluster.plot_dendrogram()
+        
+
     return sizes, descendances, hier_As, max_dists
 
 def test_clustering(id, x, sizes, descendances, hier_As):
@@ -98,17 +107,24 @@ if __name__ == '__main__':
     # Graph parameters
     G_params = {}
     G_params['type'] = 'SBM' # SBM or ER
-    G_params['N'] = N = 256
-    G_params['k'] = 4
-    G_params['p'] = 0.15
-    G_params['q'] = 0.01/4
+    G_params['N'] = N = 14 #256
+    G_params['k'] = 2 #4
+    G_params['p'] = 0.6 #0.15
+    G_params['q'] = 0.15 #0.01/4
 
     # Set seeds
     utils.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
-    G = utils.create_graph(G_params)  
+    G = utils.create_graph(G_params)
+    print(G.N)
     sizes, descendances, hier_As, max_dists = compute_clusters(G_params['k'])
+
+    signal = utils.MedianDSGSTimesX(G,L,G_params['k'])
+    #signal.signal_to_0_1_interval()
+    signal.to_unit_norm()
+    signal.plot()
+    sys.exit()
 
     start_time = time.time()
     error = np.zeros((n_signals, N_SCENARIOS))

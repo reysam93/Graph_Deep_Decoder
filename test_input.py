@@ -4,6 +4,7 @@ import time, datetime
 from multiprocessing import Pool, cpu_count
 sys.path.insert(0, 'graph_deep_decoder')
 from graph_deep_decoder import utils
+from graph_deep_decoder import graph_signals as gs
 from graph_deep_decoder.architecture import GraphDeepDecoder
 from scipy.sparse.csgraph import dijkstra
 import numpy as np
@@ -14,8 +15,9 @@ import torch.nn as nn
 N_SIGNALS = 100
 SEED = 15
 N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
+SAVE = False
 
-INPUTS = ['linear', 'median']
+INPUTS = [gs.LINEAR, gs.MEDIAN]
 EXPERIMENTS = ['bandlimited',
                {'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,256]},
                {'ups': 'weighted', 'arch': [3,3,3], 't': [4,16,64,256]}]
@@ -40,20 +42,7 @@ def compute_clusters(G, root_clust):
     return sizes, descendances, hier_As
 
 def create_signal(signal_type, G, L, k, D):
-    if signal_type == 'linear':
-        signal = utils.DifussedSparseGS(G,L,k)
-    elif signal_type == 'non-linear':
-        signal = utils.NonLinealDSGS(G,L,k,D)
-    elif signal_type == 'median':
-        signal = utils.MedianDSGS(G,L,k)
-    elif signal_type == 'comb':
-        signal = utils.NLCombinationsDSGS(G,L,k)
-    elif signal_type == 'noise':
-        signal = utils.DeterministicGS(G,np.random.randn(G.N))
-    elif signal_type == 'non-bl':
-        signal = utils.NonBLMedian(G)
-    else:
-        raise RuntimeError('Unknown signal type')
+    signal = gs.GraphSignal.create_graph_signal(signal_type, G, L, k, D)
     signal.signal_to_0_1_interval()
     signal.to_unit_norm()
     return signal
@@ -63,7 +52,7 @@ def test_input(id, signals, sizes, descendances, hier_As, n_p,
     error = np.zeros(N_EXPS)
 
     for i,x in enumerate(signals):
-        x_n = utils.GraphSignal.add_noise(x, n_p)
+        x_n = gs.GraphSignal.add_noise(x, n_p)
         for j, exp in enumerate(EXPERIMENTS):
             cont = i*len(EXPERIMENTS)+j
             if not isinstance(exp,dict):
@@ -126,7 +115,7 @@ if __name__ == '__main__':
     G_params['q'] = 0.01/k
 
     # Set seeds
-    utils.GraphSignal.set_seed(SEED)
+    gs.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     start_time = time.time()
@@ -153,5 +142,6 @@ if __name__ == '__main__':
         print_results(error[i,:,:], n_p)
     
     data['error'] = error
-    save_results(data)   
+    if SAVE:
+        save_results(data)   
     print('--- {} hours ---'.format((time.time()-start_time)/3600))

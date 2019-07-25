@@ -6,8 +6,9 @@ defining the clusters after computing the distances
 import sys, os
 import time, datetime
 from multiprocessing import Pool, cpu_count
-sys.path.insert(0, 'graph_deep_decoder')
+sys.path.insert(0, '../graph_deep_decoder')
 from graph_deep_decoder import utils
+from graph_deep_decoder import graph_signals as gs
 from graph_deep_decoder.architecture import GraphDeepDecoder
 from pygsp.graphs import StochasticBlockModel, ErdosRenyi
 
@@ -56,7 +57,7 @@ def compute_clusters(k):
 
 def test_resolution(id, x, sizes, descendances, hier_As):
     mse_est = np.zeros(N_SCENARIOS)
-    x_n = utils.GraphSignal.add_noise(x, n_p)
+    x_n = gs.GraphSignal.add_noise(x, n_p)
     for i in range(N_SCENARIOS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=n_chans, upsampling=up_method, batch_norm=batch_norm,
@@ -100,7 +101,7 @@ if __name__ == '__main__':
     G_params['q'] = 0.01/4
 
     # Set seeds
-    utils.GraphSignal.set_seed(SEED)
+    gs.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     G = utils.create_graph(G_params)    
@@ -111,7 +112,7 @@ if __name__ == '__main__':
     results = []
     with Pool(processes=cpu_count()) as pool:
         for i in range(n_signals):
-            signal = utils.DifussedSparseGS(G,L,G_params['k'])
+            signal = gs.DifussedSparseGS(G,L,G_params['k'])
             signal.signal_to_0_1_interval()
             signal.to_unit_norm()
             results.append(pool.apply_async(test_resolution,

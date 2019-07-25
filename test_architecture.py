@@ -8,6 +8,7 @@ import time, datetime
 from multiprocessing import Pool, cpu_count 
 sys.path.insert(0, 'graph_deep_decoder')
 from graph_deep_decoder import utils
+from graph_deep_decoder import graph_signals as gs
 from graph_deep_decoder.architecture import GraphDeepDecoder
 from pygsp.graphs import StochasticBlockModel, ErdosRenyi
 
@@ -26,6 +27,7 @@ type_z = 'alternated'
 last_act_fun = nn.Sigmoid()
 
 # Constants
+SAVE = False
 SEED = 15
 N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
 EXPERIMENTS = [{'n_chans': [6]*3, 'n_clusts': [4,16,64,256]},
@@ -64,7 +66,7 @@ def test_architecture(id, x, sizes, descendances, hier_As, n_p):
     error = np.zeros(N_EXPS)
     mse_fit = np.zeros(N_EXPS)
     params = np.zeros(N_EXPS)
-    x_n = utils.GraphSignal.add_noise(x, n_p)
+    x_n = gs.GraphSignal.add_noise(x, n_p)
     for i in range(N_EXPS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=EXPERIMENTS[i]['n_chans'], upsampling=up_method, batch_norm=batch_norm,
@@ -128,7 +130,7 @@ if __name__ == '__main__':
     method = 'maxclust'
     
     # Set seeds
-    utils.GraphSignal.set_seed(SEED)
+    gs.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     G = utils.create_graph(G_params, SEED, type_z=type_z)
@@ -142,7 +144,7 @@ if __name__ == '__main__':
         results = []
         with Pool(processes=cpu_count()) as pool:
             for j in range(n_signals):
-                signal = utils.DifussedSparseGS(G,L,G_params['k'])
+                signal = gs.DifussedSparseGS(G,L,G_params['k'])
                 signal.signal_to_0_1_interval()
                 signal.to_unit_norm()
                 results.append(pool.apply_async(test_architecture,
@@ -152,9 +154,9 @@ if __name__ == '__main__':
                 error[i,j,:], n_params = results[j].get()
 
         # Print result:
-        save_partial_results(error[i,:,:], n_params, G_params, n_p)
         print_results(N, error[i,:,:], n_params)
     print('--- {} hours ---'.format((time.time()-start_time)/3600))
-    save_results(error, n_params, G_params)
+    if SAVE:
+        save_results(error, n_params, G_params)
     
     

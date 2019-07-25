@@ -2,8 +2,9 @@ import sys
 import os
 import time, datetime
 from multiprocessing import Pool, cpu_count
-sys.path.insert(0, 'graph_deep_decoder')
+sys.path.insert(0, '../graph_deep_decoder')
 from graph_deep_decoder import utils
+from graph_deep_decoder import graph_signals as gs
 from graph_deep_decoder.architecture import GraphDeepDecoder
 from scipy.sparse.csgraph import dijkstra
 import numpy as np
@@ -14,7 +15,7 @@ import torch.nn as nn
 N_SIGNALS = 100
 SEED = 15
 #p_miss = 0.1
-P_MISS = [.05, .1, .3, .5]
+P_MISS = [.1]#[.05, .1, .3, .5]
 
 EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,256]},
                {'ups': 'no_A', 'arch': [3,3,3], 't': [4,16,64,256]},
@@ -42,16 +43,7 @@ def compute_clusters(G, root_clust):
     return sizes, descendances, hier_As
 
 def create_signal(signal_type, G, L, k, D=None):
-    if signal_type == 'linear':
-        signal = utils.DifussedSparseGS(G,L,k)
-    elif signal_type == 'non-linear':
-        signal = utils.NonLinealDSGS(G,L,k,D)
-    elif signal_type == 'median':
-        signal = utils.MedianDSGS(G,L,k)
-    elif signal_type == 'comb':
-        signal = utils.NLCombinationsDSGS(G,L,k)
-    else:
-        raise RuntimeError('Unknown signal type')
+    signal = gs.GraphSignal.create_graph_signal(signal_type, G, L, k, D=None)
     signal.signal_to_0_1_interval()
     signal.to_unit_norm()
     return signal
@@ -60,7 +52,7 @@ def test_input(id, x, sizes, descendances, hier_As, p_miss,
                 last_act_fn, batch_norm):
     error = np.zeros(N_EXPS)
 
-    inp_mask = utils.GraphSignal.generate_inpaint_mask(x, p_miss)
+    inp_mask = gs.GraphSignal.generate_inpaint_mask(x, p_miss)
     clean_error = np.sum(np.square(x-x*inp_mask))/np.square(np.linalg.norm(x))
     for i, exp in enumerate(EXPERIMENTS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
@@ -98,7 +90,7 @@ if __name__ == '__main__':
     data['batch_norm'] = True
     data['EXPERIMENTS'] = EXPERIMENTS
     # data['p_miss'] = p_miss
-    data['input'] = 'median'
+    data['input'] = gs.MEDIAN
 
     # Graph parameters
     G_params = {}
@@ -109,15 +101,14 @@ if __name__ == '__main__':
     G_params['q'] = 0.01/k
 
     # Set seeds
-    utils.GraphSignal.set_seed(SEED)
+    gs.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     start_time = time.time()
-    G = utils.create_graph(G_params, seed=SEED)
+    G = utils.create_graph(G_params, type_z='alternated', seed=SEED)
     sizes, descendances, hier_As = compute_clusters(G, G_params['k'])
     data['g_params'] = G_params
 
-    # DELETE THIS FOR!
     for p_miss in P_MISS:
         data['p_miss'] = p_miss
 

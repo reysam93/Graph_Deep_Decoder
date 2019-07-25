@@ -1,6 +1,7 @@
 import os, sys
 import time, datetime
 from graph_deep_decoder import utils
+from graph_deep_decoder import graph_signals as gs
 from graph_deep_decoder.architecture import GraphDeepDecoder
 from multiprocessing import Pool 
 import numpy as np
@@ -25,20 +26,6 @@ ACT_FUN = nn.Tanh()
 # Bandlimited
 N_PARAMS = 48
 
-"""
-EXPERIMENTS = [{'ups': 'original', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
-               {'ups': 'no_A', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': None},
-               {'ups': 'weighted', 'arch': [3,3,3], 't': [4,16,64,None], 'gamma': 0.5},
-               {'ups': 'original', 'arch': [3,3,3], 't': [2,8,32,None], 'gamma': None},
-               {'ups': 'no_A', 'arch': [3,3,3], 't': [2,8,32,None], 'gamma': None},
-               {'ups': 'weighted', 'arch': [3,3,3], 't': [2,8,32,None], 'gamma': 0.5},
-               {'ups': 'original', 'arch': [4,4,4,4], 't': [4,16,32,64,None], 'gamma': None},
-               {'ups': 'no_A', 'arch': [4,4,4,4], 't': [4,16,32,64,None], 'gamma': None},
-               {'ups': 'weighted', 'arch': [4,4,4,4], 't': [4,16,32,64,None], 'gamma': 0.5},
-               {'ups': 'original', 'arch': [4,4,4,4], 't': [2,8,16,32,None], 'gamma': None},
-               {'ups': 'no_A', 'arch': [4,4,4,4], 't': [2,8,16,32,None], 'gamma': None},
-               {'ups': 'weighted', 'arch': [4,4,4,4], 't': [2,8,16,32,None], 'gamma': 0.5},]
-"""
 N_EXPS = len(EXPERIMENTS)
 
 
@@ -54,7 +41,7 @@ def read_graphs():
         if G.N < MIN_SIZE or not G.is_connected():
             continue
         
-        signal = utils.DeterministicGS(G, graphs_mat['cell_X'][i][0][:,ATTR])
+        signal = gs.DeterministicGS(G, graphs_mat['cell_X'][i][0][:,ATTR])
         if np.linalg.norm(signal.x) == 0:
             continue
         #signal.normalize()
@@ -94,7 +81,7 @@ def compute_clusters(Gs):
 
 def denoise_real(id, x, sizes, descendances, hier_As, n_p, V):
     error = np.zeros(N_EXPS)
-    x_n = utils.GraphSignal.add_noise(x, n_p)
+    x_n = gs.GraphSignal.add_noise(x, n_p)
     for i, exp in enumerate(EXPERIMENTS):
         if not isinstance(exp,dict):
             x_est = utils.bandlimited_model(x_n, V, n_coefs=N_PARAMS)
@@ -135,7 +122,7 @@ def save_results(error):
 
 if __name__ == '__main__':
     # Set seeds
-    utils.GraphSignal.set_seed(SEED)
+    gs.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
     
     Gs, signals = read_graphs()

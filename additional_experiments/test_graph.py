@@ -5,8 +5,9 @@ Check the efect of the graph
 import sys, os
 import time, datetime
 from multiprocessing import Pool, cpu_count
-sys.path.insert(0, 'graph_deep_decoder')
+sys.path.insert(0, '../graph_deep_decoder')
 from graph_deep_decoder import utils
+from graph_deep_decoder import graph_signals as gs
 from graph_deep_decoder.architecture import GraphDeepDecoder
 
 import numpy as np
@@ -64,7 +65,7 @@ def compute_clusters(Gs):
 def compute_signals(Gs):
     signals = []
     for i, G in enumerate(Gs):
-        signal = utils.DifussedSparseGS(G,L,G_PARAMS[i]['k'],-1,1)
+        signal = gs.DifussedSparseGS(G,L,G_PARAMS[i]['k'],-1,1)
         signal.signal_to_0_1_interval()
         signal.to_unit_norm()
         signals.append(signal.x)
@@ -75,7 +76,7 @@ def test_graphs(id, signals, sizes, descendances, hier_As):
     mse_fit = np.zeros(N_SCENARIOS)
     for i in range(N_SCENARIOS):
         x = signals[i]
-        x_n = utils.GraphSignal.add_noise(x, n_p)
+        x_n = gs.GraphSignal.add_noise(x, n_p)
 
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=n_chans, upsampling=up_method, batch_norm=batch_norm,
@@ -112,7 +113,7 @@ def save_results(mse_est):
 
 if __name__ == '__main__':
     # Set seeds
-    utils.GraphSignal.set_seed(SEED)
+    gs.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
     Gs = [utils.create_graph(G_PARAMS[i], seed=SEED) for i in range(N_SCENARIOS)] 
