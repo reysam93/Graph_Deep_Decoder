@@ -17,31 +17,25 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 
 # Tuning parameters
-n_signals = 100
+n_signals = 50
 L = 6
 batch_norm = True
-act_fun = nn.ReLU()
+act_fun = nn.Tanh()
 up_method = 'weighted'
 gamma = 0.5
 type_z = 'alternated'
-last_act_fun = nn.Sigmoid()
+last_act_fun = None
 
 # Constants
-SAVE = False
+SAVE = True
 SEED = 15
-N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
+N_P = [0, .2]
 EXPERIMENTS = [{'n_chans': [6]*3, 'n_clusts': [4,16,64,256]},
                {'n_chans': [4]*4, 'n_clusts': [4,16,32,64,256]},
                {'n_chans': [4,4,3,3,2], 'n_clusts': [4,8,16,32,64,256]},
                {'n_chans': [3]*3, 'n_clusts': [4,16,64,256]},
                {'n_chans': [2]*6, 'n_clusts': [4,8,16,32,64,128,256]}]
 
-"""
-N_CHANS = [[6]*3, [4]*3, [3]*3, [2]*3, [10,5,3],  [4,3,3], [4], [9], [4]*4, [8,6,4,2],
-           [4,3,2,2], [3]*6, [2]*6, [4, 4, 3, 3, 2]]
-N_CLUSTS = [[4,16,64,256]]*6 + [[4,256]]*2 + [[4,16,32,64,256]]*3 + \
-            [[4,8,16,32,64,128,256]]*2 + [[4, 8, 16 ,32, 64, 256]]
-"""
 N_EXPS = len(EXPERIMENTS)
 
 def plot_clusters(G, cluster):
@@ -145,7 +139,6 @@ if __name__ == '__main__':
         with Pool(processes=cpu_count()) as pool:
             for j in range(n_signals):
                 signal = gs.DifussedSparseGS(G,L,G_params['k'])
-                signal.signal_to_0_1_interval()
                 signal.to_unit_norm()
                 results.append(pool.apply_async(test_architecture,
                                            args=[j, signal.x, sizes,
