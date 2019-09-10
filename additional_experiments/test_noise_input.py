@@ -5,33 +5,43 @@ parameters which represent the signal
 
 import sys, os
 import time, datetime
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool, cpu_count 
 sys.path.insert(0, '../graph_deep_decoder')
 from graph_deep_decoder import utils
 from graph_deep_decoder import graph_signals as gs
 from graph_deep_decoder.architecture import GraphDeepDecoder
-from pygsp.graphs import StochasticBlockModel, ErdosRenyi
 
 import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn as nn
 
 # Tuning parameters
-n_signals = 200
+n_signals = 50
 L = 6
-batch_norm = True #True
-act_fun = nn.ReLU()
-up_method = 'weighted'
-last_act_fun = nn.Sigmoid() #nn.Tanh()
+batch_norm = False
+act_fun = nn.Tanh() #nn.ReLU()
+gamma = 0.5
+type_z = 'random'
+last_act_fun = nn.Tanh()
 
 # Constants
+SAVE = False
 SEED = 15
-N_CHANS = [[6]*3, [4]*3, [3]*3, [2]*3, [10,5,3],  [4,3,3], [4], [9], [4]*4, [8,6,4,2],
-           [4,3,2,2], [3]*6, [2]*6, [4, 4, 3, 3, 2], [8, 8, 8, 8]]
-N_CLUSTS = [[4,16,64,256]]*6 + [[4,256]]*2 + [[4,16,32,64,256]]*3 + \
-            [[4,8,16,32,64,128,256]]*2 + [[4, 8, 16 ,32, 64, 256]] + \
-            [[4, 16, 32, 64, 256]]
-N_SCENARIOS = len(N_CHANS)
+N_P = [0]
+EXPERIMENTS = [{'n_chans': [6]*3, 'n_clusts': [4,16,64,256], 'ups': None},
+               {'n_chans': [6]*3, 'n_clusts': [4,16,64,256], 'ups': 'original'},
+               {'n_chans': [6]*3, 'n_clusts': [4,16,64,256], 'ups': 'no_A'},
+               {'n_chans': [6]*3, 'n_clusts': [4,16,64,256], 'ups': 'weighted'},
+               {'n_chans': [4]*4, 'n_clusts': [4,16,32,64,256], 'ups': None},
+               {'n_chans': [4]*4, 'n_clusts': [4,16,32,64,256], 'ups': 'original'},
+               {'n_chans': [4]*4, 'n_clusts': [4,16,32,64,256], 'ups': 'no_A'},
+               {'n_chans': [4]*4, 'n_clusts': [4,16,32,64,256], 'ups': 'weighted'},
+               {'n_chans': [3]*3, 'n_clusts': [4,16,64,256], 'ups': None},
+               {'n_chans': [3]*3, 'n_clusts': [4,16,64,256], 'ups': 'original'},
+               {'n_chans': [3]*3, 'n_clusts': [4,16,64,256], 'ups': 'no_A'},
+               {'n_chans': [3]*3, 'n_clusts': [4,16,64,256], 'ups': 'weighted'},]
+
+N_EXPS = len(EXPERIMENTS)
 
 def plot_clusters(G, cluster):
     G.set_coordinates(kind='community2D')
@@ -40,56 +50,69 @@ def plot_clusters(G, cluster):
     axes[1].spy(G.W)
     plt.show()
 
-def compute_clusters(alg, k):
-    assert(len(N_CHANS) == len(N_CLUSTS))
+def compute_clusters(G, alg, k):
     sizes = []
     descendances = []
     hier_As = []
-    for i in range(len(N_CHANS)):
-        assert(len(N_CHANS[i])+1 == len(N_CLUSTS[i]))
-        cluster = utils.MultiRessGraphClustering(G, N_CLUSTS[i], k, alg)
+    for i in range(N_EXPS):
+        cluster = utils.MultiRessGraphClustering(G, EXPERIMENTS[i]['n_clusts'], k, alg)
         sizes.append(cluster.clusters_size)
         descendances.append(cluster.compute_hierarchy_descendance())
-        hier_As.append(cluster.compute_hierarchy_A(up_method))
+        hier_As.append(cluster.compute_hierarchy_A(EXPERIMENTS[i]['ups']))
     return sizes, descendances, hier_As
 
-def test_architecture(id, x, sizes, descendances, hier_As):
-    error = np.zeros(N_SCENARIOS)
-    mse_fit = np.zeros(N_SCENARIOS)
-    params = np.zeros(N_SCENARIOS)
-    for i in range(N_SCENARIOS):
+def test_architecture(id, x, sizes, descendances, hier_As, n_p):    
+    error = np.zeros(N_EXPS)
+    mse_fit = np.zeros(N_EXPS)
+    params = np.zeros(N_EXPS)
+    #x_n = gs.GraphSignal.add_noise(x, n_p)
+    x_n = x
+    for i in range(N_EXPS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
-                        n_channels=N_CHANS[i], upsampling=up_method, batch_norm=batch_norm,
-                        last_act_fun=last_act_fun, act_fun=act_fun)
+                        n_channels=EXPERIMENTS[i]['n_chans'], upsampling=EXPERIMENTS[i]['ups'], batch_norm=batch_norm,
+                        last_act_fun=last_act_fun, act_fun=act_fun, gamma=gamma)
 
         dec.build_network()
-        x_est, mse_fit[i] = dec.fit(x)
+        x_est, mse_fit[i] = dec.fit(x_n, n_iter=3000)
         
         error[i] = np.sum(np.square(x-x_est))/np.square(np.linalg.norm(x))
         params[i] = dec.count_params()
-        print('Signal: {} Scenario: {} ({} params): Error: {:.4f}'
-                            .format(id, i, params[i], error[i]))
+        print('Signal: {} Scenario {}: ({} params): Error: {:.4f}'
+                            .format(id, i+1, params[i], error[i]))
     return error, params
 
-def print_results(N, error, params):
-    mean_error = np.mean(error, axis=0)
-    median = np.median(error, axis=0)
-    std = np.std(error, axis=0)
-    for i in range(N_SCENARIOS):
-        print('{}. (CHANS {}, CLUSTS: {}) '.format(i+1, N_CHANS[i], N_CLUSTS[i]))
-        print('\tMean MSE: {}\tParams: {}\tCompression: {}\tMEdian MSE: {}\tSTD: {}'
-                            .format(mean_error[i], params[i], N/params[i], median[i], std[i]))
+def print_results(N, err, params):
+    mean_err = np.mean(err,0)
+    median_err = np.median(err,0)
+    std = np.std(err,0)
+    for i in range(N_EXPS):
+        print('{}. {} '.format(i+1, EXPERIMENTS[i]))
+        print('\tMean MSE: {}\tParams: {}\tCompression: {}\tMedian MSE: {}\tSTD: {}'
+                            .format(mean_err[i], params[i], N/params[i], median_err[i], std[i]))
 
-def save_results(error, n_params, G_params):
-    if not os.path.isdir('./results/test_input'):
-        os.makedirs('./results/test_input')
+def save_partial_results(error, n_params, G_params, n_p):
+    if not os.path.isdir('./results/test_arch'):
+        os.makedirs('./results/test_arch')
 
-    data = {'SEED': SEED, 'N_CHANS': N_CHANS, 'N_CLUSTS': N_CLUSTS,
-            'n_signals': n_signals, 'L': L, 'batch_norm': batch_norm,
-            'up_method': up_method, 'last_act_fun': last_act_fun, 'G_params': G_params,
+    data = {'SEED': SEED, 'EXPERIMENTS': EXPERIMENTS,
+            'n_signals': n_signals, 'L': L, 'n_p': n_p, 'batch_norm': batch_norm,
+            'last_act_fun': last_act_fun, 'G_params': G_params,
             'mse_est': error, 'n_params': n_params}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    path = './results/test_input/input_noise_{}'.format(timestamp)
+    path = './results/test_arch/arch_pn_{}_{}'.format(n_p, timestamp)
+    np.save(path, data)
+    print('SAVED as:',path)
+
+def save_results(error, n_params, G_params):
+    if not os.path.isdir('./results/test_arch'):
+        os.makedirs('./results/test_arch')
+
+    data = {'SEED': SEED, 'EXPERIMENTS': EXPERIMENTS,
+            'n_signals': n_signals, 'L': L, 'N_P': N_P, 'batch_norm': batch_norm,
+            'last_act_fun': last_act_fun, 'G_params': G_params,
+            'error': error, 'n_params': n_params, 'gamma': gamma, 'type_z': type_z}
+    timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
+    path = './results/test_arch/arch_{}'.format(timestamp)
     np.save(path, data)
     print('SAVED as:',path)
 
@@ -110,27 +133,29 @@ if __name__ == '__main__':
     gs.GraphSignal.set_seed(SEED)
     GraphDeepDecoder.set_seed(SEED)
 
-    G = utils.create_graph(G_params)
-    sizes, descendances, hier_As = compute_clusters(alg, G_params['k'])
-    
+    G = utils.create_graph(G_params, SEED, type_z=type_z)
+    sizes, descendances, hier_As = compute_clusters(G, alg, G_params['k'])
+
+
     start_time = time.time()
-    error = np.zeros((n_signals, N_SCENARIOS))
-    results = []
-    with Pool(processes=cpu_count()) as pool:
-        for i in range(n_signals):
-            signal = gs.DeterministicGS(G,np.random.randn(N))
-            signal.signal_to_0_1_interval()
-            signal.to_unit_norm()
-            results.append(pool.apply_async(test_architecture,
-                                        args=[i, signal.x, sizes,
-                                                descendances, hier_As]))
+    error = np.zeros((len(N_P), n_signals, N_EXPS))
+    for i, n_p in enumerate(N_P):
+        print('Noise:', n_p)
+        results = []
+        with Pool(processes=cpu_count()) as pool:
+            for j in range(n_signals):
+                signal = gs.DeterministicGS(G,np.random.randn(N))
+                signal.to_unit_norm()
+                results.append(pool.apply_async(test_architecture,
+                                           args=[j, signal.x, sizes,
+                                                descendances, hier_As, n_p]))
+            for j in range(n_signals):
+                error[i,j,:], n_params = results[j].get()
 
-        for i in range(n_signals):
-            error[i,:], n_params = results[i].get()
-
-    # Print result:
-    print('--- {} minutes ---'.format((time.time()-start_time)/60))
-    print_results(N, error, n_params)
-    save_results(error, n_params, G_params)
+        # Print result:
+        print_results(N, error[i,:,:], n_params)
+    print('--- {} hours ---'.format((time.time()-start_time)/3600))
+    if SAVE:
+        save_results(error, n_params, G_params)
     
     
