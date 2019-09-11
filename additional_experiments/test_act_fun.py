@@ -81,15 +81,15 @@ def print_results(N, err):
 
 
 def save_results(error, G_params):
-    if not os.path.isdir('./results/test_act_fun'):
-        os.makedirs('./results/test_act_fun')
+    if not os.path.isdir('./results/test_actfun'):
+        os.makedirs('./results/test_actfun')
 
     data = {'SEED': SEED, 'EXPERIMENTS': EXPERIMENTS,
             'n_signals': n_signals, 'L': L, 'N_P': N_P, 'batch_norm': batch_norm,
             'up_method': up_method, 'G_params': G_params,
             'error': error, 'gamma': gamma, 'type_z': type_z}
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    path = './results/test_arch/arch_{}'.format(timestamp)
+    path = './results/test_actfun/actfun_{}'.format(timestamp)
     np.save(path, data)
     print('SAVED as:',path)
 

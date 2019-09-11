@@ -41,6 +41,8 @@ class ExpPrinter():
             self.print_inpainting()
         elif self.exp_type == 'res':
             self.print_ress()
+        elif self.exp_type == 'actfun':
+            self.print_act()
         else:
             print('ERROR: Unkown file type')
 
@@ -183,8 +185,21 @@ class ExpPrinter():
             print('{}. RESOLUTIONS: {}'.format(i+1, self.data['RESOLUTIONS'][i]))
             print('\tMean ERROR: {}\tMedian ERROR: {}'.format(error, median_error[i]))
 
+    def print_act(self):
+        print('batch norm:', self.data['batch_norm'])
+        print('L', self.data['L'])
+        for i, n_p in enumerate(self.data['N_P']):
+            print('NOISE: ', n_p)
+            mean_err = np.mean(self.data['error'][i,:,:],axis=0)
+            median_err = np.median(self.data['error'][i,:,:],axis=0)
+            std = np.std(self.data['error'][i,:,:],axis=0)
+            for j, exp in enumerate(self.data['EXPERIMENTS']):
+                print('{}. {}'.format(j+1, exp))
+                print('\tMean ERR: {}\tMedian ERR: {}\tSTD: {}'.format(mean_err[j], median_err[j], std[j]))
+            print()
+
 if __name__ == "__main__":
-    file_name = 'ups_2019_07_08-19_36' #denoise_real_2019_07_11-13_51'
+    file_name = 'actfun_2019_07_07-23-39' #denoise_real_2019_07_11-13_51'
     printer = ExpPrinter(file_name)
     printer.print_summary()
 
