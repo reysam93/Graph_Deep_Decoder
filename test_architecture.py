@@ -20,16 +20,18 @@ import torch.nn as nn
 n_signals = 50
 L = 6
 batch_norm = True
-act_fun = nn.Tanh()
 up_method = 'weighted'
 gamma = 0.5
 type_z = 'alternated'
-last_act_fun = None
+act_fun = nn.CELU()
+last_act_fun = nn.Tanh()
 
 # Constants
-SAVE = True
+SAVE = False
+N_CPUS = cpu_count()-1
 SEED = 15
-N_P = [0, .2]
+N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4]
+
 EXPERIMENTS = [{'n_chans': [6]*3, 'n_clusts': [4,16,64,256]},
                {'n_chans': [4]*4, 'n_clusts': [4,16,32,64,256]},
                {'n_chans': [4,4,3,3,2], 'n_clusts': [4,8,16,32,64,256]},
@@ -134,9 +136,9 @@ if __name__ == '__main__':
     start_time = time.time()
     error = np.zeros((len(N_P), n_signals, N_EXPS))
     for i, n_p in enumerate(N_P):
-        print('Noise:', n_p)
+        print('Noise:', n_p, "CPUs used:", N_CPUS)
         results = []
-        with Pool(processes=cpu_count()) as pool:
+        with Pool(processes=N_CPUS) as pool:
             for j in range(n_signals):
                 signal = gs.DifussedSparseGS(G,L,G_params['k'])
                 signal.to_unit_norm()

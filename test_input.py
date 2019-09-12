@@ -14,8 +14,9 @@ import torch.nn as nn
 # Constants
 N_SIGNALS = 100
 SEED = 15
-N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
+N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4]
 SAVE = False
+N_CPUS = cpu_count()-1
 
 INPUTS = [gs.LINEAR, gs.MEDIAN]
 EXPERIMENTS = ['bandlimited',
@@ -48,7 +49,7 @@ def create_signal(signal_type, G, L, k, D):
     return signal
 
 def test_input(id, signals, sizes, descendances, hier_As, n_p,
-                last_act_fn, batch_norm, V):
+                act_fn, last_act_fn, batch_norm, V):
     error = np.zeros(N_EXPS)
 
     for i,x in enumerate(signals):
@@ -60,7 +61,8 @@ def test_input(id, signals, sizes, descendances, hier_As, n_p,
             else:
                 dec = GraphDeepDecoder(descendances[j], hier_As[j], sizes[j],
                                 n_channels=exp['arch'], upsampling=exp['ups'],
-                                last_act_fun=last_act_fn, batch_norm=batch_norm)
+                                act_fun=act_fn, last_act_fun=last_act_fn,
+                                batch_norm=batch_norm)
                 dec.build_network()
                 x_est, _ = dec.fit(x_n, n_iter=3000)
             error[cont] = np.sum(np.square(x-x_est))/np.square(np.linalg.norm(x))
@@ -100,7 +102,8 @@ def save_results(data):
 if __name__ == '__main__':
     data = {}
     data['L'] = L = 6
-    data['last_act_fn'] = nn.Sigmoid()
+    data['last_act_fn'] = nn.Tanh()
+    data['act_fn'] = nn.CELU()
     data['batch_norm'] = True
     data['EXPERIMENTS'] = EXPERIMENTS
     data['INPUTS'] = INPUTS
@@ -127,14 +130,14 @@ if __name__ == '__main__':
 
     error = np.zeros((len(N_P), N_SIGNALS, N_EXPS))
     for i, n_p in enumerate(N_P):
-        print('Noise:', n_p)
+        print('Noise:', n_p, "CPUs used:", N_CPUS)
         results = []
         with Pool(processes=cpu_count()) as pool:
             for j in range(N_SIGNALS):
                 signals = [create_signal(s_in,G,L,k,D).x for s_in in INPUTS]
                 results.append(pool.apply_async(test_input,
                             args=[j, signals, sizes, descendances, hier_As, n_p,
-                                    data['last_act_fn'], data['batch_norm'], G.U]))
+                                    data['last_act_fn'], data['act_fn'], data['batch_norm'], G.U]))
             for j in range(N_SIGNALS):
                 error[i,j,:] = results[j].get()
 

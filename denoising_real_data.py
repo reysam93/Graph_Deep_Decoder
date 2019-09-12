@@ -3,7 +3,7 @@ import time, datetime
 from graph_deep_decoder import utils
 from graph_deep_decoder import graph_signals as gs
 from graph_deep_decoder.architecture import GraphDeepDecoder
-from multiprocessing import Pool 
+from multiprocessing import Pool, cpu_count
 import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn as nn
@@ -11,18 +11,20 @@ from scipy.io import loadmat
 from pygsp.graphs import Graph
 
 SEED = 15
+SAVE = False
+N_CPUS = cpu_count()-1
 DATASET_PATH = 'dataset/graphs.mat'
 MAX_SIGNALS = 100
 MIN_SIZE = 50
 ATTR = 6
-N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
+N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4]
 EXPERIMENTS = ['bandlimited',
                {'ups': 'original', 'arch': [3,3], 't': [4,16,None], 'gamma': None},
                {'ups': 'weighted', 'arch': [3,3], 't': [4,16,None], 'gamma': 0.5}]
 # Architecture
 BATCH_NORM = True
 LAST_ACT_FUN = nn.Tanh()
-ACT_FUN = nn.Tanh()
+ACT_FUN = nn.CELU()
 # Bandlimited
 N_PARAMS = 48
 
@@ -132,7 +134,7 @@ if __name__ == '__main__':
     error = np.zeros((len(N_P), n_signals, N_EXPS))
     start_time = time.time()
     for i, n_p in enumerate(N_P):
-        print('noise',i,':',n_p)
+        print('Noise:', n_p, "CPUs used:", N_CPUS)
         results = []
         with Pool() as pool:
             for j in range(n_signals):
@@ -145,5 +147,6 @@ if __name__ == '__main__':
 
         print_results(error[i,:,:], n_p)
     
-    save_results(error)
+    if SAVE:
+        save_results(error)
     print('--- {} minutes ---'.format((time.time()-start_time)/60))

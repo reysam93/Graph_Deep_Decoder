@@ -26,13 +26,15 @@ c_method = 'maxclust'
 alg = 'spectral_clutering'
 linkage = 'average'
 n_chans = [3,3,3]
-last_act_fun = nn.Sigmoid()
+act_fun = nn.CELU()
+last_act_fun = nn.Tanh()
 
 
 # Constants
 SAVE = False
+N_CPUS = cpu_count()-1
 SEED = 15
-N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
+N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4]
 
 EXPERIMENTS = [[None, None], ['original', None], ['no_A', None],
               ['binary', .5], ['weighted', 0], ['weighted', .25],
@@ -65,7 +67,7 @@ def test_upsampling(id, x, sizes, descendances, hier_As, n_p):
     for i in range(N_SCENARIOS):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=n_chans, upsampling=EXPERIMENTS[i][0], 
-                        batch_norm=batch_norm, last_act_fun=last_act_fun,
+                        batch_norm=batch_norm, last_act_fun=last_act_fun, act_fun=act_fun,
                         gamma=EXPERIMENTS[i][1])
 
         dec.build_network()
@@ -107,7 +109,8 @@ def save_results(error, G_params):
             'n_signals': n_signals, 'L': L, 'N_P': N_P, 'batch_norm': batch_norm,
             'c_method': c_method, 'alg': alg, 'last_act_fun': last_act_fun,
             'G_params': G_params, 'linkage': linkage, 'n_chans': n_chans,
-            'error': error}
+            'last_act_fun': last_act_fun, 'act_fun': act_fun, 'error': error}
+
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
     path = './results/test_ups/ups_{}'.format(timestamp)
     np.save(path, data)
@@ -132,7 +135,7 @@ if __name__ == '__main__':
     start_time = time.time()
     error = np.zeros((len(N_P), n_signals, N_SCENARIOS))
     for i, n_p in enumerate(N_P):
-        print('Noise:', n_p)
+        print('Noise:', n_p, "CPUs used:", N_CPUS)
         results = []
         with Pool(processes=cpu_count()) as pool:
             for j in range(n_signals):
