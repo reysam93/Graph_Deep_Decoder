@@ -130,6 +130,12 @@ class GraphUpsampling(nn.Module):
         self.U = torch.Tensor(self.U)#.to_sparse()
 
     def forward(self, input):
+        if self.method == 'original':
+            sf = self.child_size/self.parent_size
+            output = torch.nn.functional.interpolate(input, scale_factor=sf,
+                                    mode='linear', align_corners=True)
+            return output
+
         n_channels = input.shape[1]
         matrix_in = input.view(n_channels, input.shape[2]).t()
 
@@ -141,10 +147,6 @@ class GraphUpsampling(nn.Module):
         elif self.method == 'binary' or self.method == 'weighted':
             neigbours_val = torch.Tensor(self.A_mean).mm(parents_val)
             output =  self.gamma*parents_val + (1-self.gamma)*neigbours_val
-        elif self.method == 'original':
-            sf = self.child_size/self.parent_size
-            output = torch.nn.functional.interpolate(input, scale_factor=sf,
-                                    mode='linear', align_corners=True)
         else:
             raise RuntimeError('Unknown sampling method')
 
