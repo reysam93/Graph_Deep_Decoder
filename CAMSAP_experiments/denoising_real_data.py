@@ -1,9 +1,10 @@
 import os, sys
+sys.path.insert(0, '../graph_deep_decoder')
 import time, datetime
 from graph_deep_decoder import utils
 from graph_deep_decoder import graph_signals as gs
 from graph_deep_decoder.architecture import GraphDeepDecoder
-from multiprocessing import Pool 
+from multiprocessing import Pool, cpu_count
 import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn as nn

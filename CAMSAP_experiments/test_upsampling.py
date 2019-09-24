@@ -6,7 +6,7 @@ signal from noise.
 import sys, os
 import time, datetime
 from multiprocessing import Pool, cpu_count
-sys.path.insert(0, 'graph_deep_decoder')
+sys.path.insert(0, '../graph_deep_decoder')
 from graph_deep_decoder import utils
 from graph_deep_decoder import graph_signals as gs
 from graph_deep_decoder.architecture import GraphDeepDecoder
