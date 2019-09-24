@@ -11,6 +11,7 @@ from scipy.io import loadmat
 from pygsp.graphs import Graph
 
 SEED = 15
+N_CPUS = cpu_count()-1
 DATASET_PATH = 'dataset/graphs.mat'
 MAX_SIGNALS = 100
 MIN_SIZE = 50
@@ -129,12 +130,13 @@ if __name__ == '__main__':
     n_signals = len(signals)
     sizes, descendances, hier_As = compute_clusters(Gs)
 
+    print("CPUs used:", N_CPUS)
     error = np.zeros((len(N_P), n_signals, N_EXPS))
     start_time = time.time()
     for i, n_p in enumerate(N_P):
         print('noise',i,':',n_p)
         results = []
-        with Pool() as pool:
+        with Pool(processes=N_CPUS) as pool:
             for j in range(n_signals):
                 results.append(pool.apply_async(denoise_real,
                         args=[j, signals[j].x, sizes[j], descendances[j],

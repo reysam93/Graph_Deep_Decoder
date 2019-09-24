@@ -39,7 +39,7 @@ def create_graph(ps, seed=None, type_z='random'):
         elif type_z == 'alternated':
             z = np.array(list(range(ps['k']))*int(ps['N']/ps['k'])+list(range(ps['N']%ps['k'])))
         elif type_z == 'random':
-            z = assign_nodes_to_comms(ps['N'],ps['k'])
+            z = np.array(list(range(ps['k']))*int(ps['N']/ps['k'])+list(range(ps['N']%ps['k'])))
             np.random.shuffle(z)
         else:
             z = None
@@ -101,11 +101,12 @@ class MultiRessGraphClustering():
         X = G.U[:,1:self.k]
         self.Z = linkage(X, self.link_fun)
 
-    def plot_dendrogram(self):
+    def plot_dendrogram(self, show=True, no_labels=False):
         plt.figure()
-        dendrogram(self.Z, orientation='left', no_labels=True)
+        dendrogram(self.Z, orientation='left', no_labels=no_labels)
         plt.gca().tick_params(labelsize=16)
-        plt.show()
+        if show:
+            plt.show()
 
     def compute_hierarchy_descendance(self):
         for i in range(len(self.clusters_size)-1):

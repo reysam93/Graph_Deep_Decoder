@@ -37,7 +37,7 @@ class GraphDeepDecoder():
         else:
             shape = [1, self.n_channels[0], self.n_clust[-1]]
         self.input = Variable(torch.zeros(shape)).data.normal_()
-        
+
     def build_network(self):
         for l in range(len(self.n_channels)-1):
             conv = nn.Conv1d(self.n_channels[l], self.n_channels[l+1], 
@@ -99,15 +99,17 @@ class GraphDeepDecoder():
                 best_net =  copy.deepcopy(self.model)
 
         self.model = best_net
+
         return self.model(self.input).detach().numpy(), best_mse
 
     def count_params(self):
         return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-"""
-Use information from the agglomerative hierarchical clustering for doing the upsampling by
-creating the upsampling matrix U
-"""
+
 class GraphUpsampling(nn.Module):
+    """
+    Use information from the agglomerative hierarchical clustering for doing the upsampling by
+    creating the upsampling matrix U
+    """
     def __init__(self, descendance, parent_size, A, method, gamma):
         super(GraphUpsampling, self).__init__()
         self.descendance = descendance
@@ -128,20 +130,15 @@ class GraphUpsampling(nn.Module):
         self.U = torch.Tensor(self.U)#.to_sparse()
 
     def forward(self, input):
-        # TODO: check if making ops with np instead of torch increase speed
         n_channels = input.shape[1]
-        matrix_in = input.view(self.parent_size, n_channels)
+        matrix_in = input.view(n_channels, input.shape[2]).t()
 
         parents_val = self.U.mm(matrix_in)
         # NOTE: gamma = 1 is equivalent to no_A
         # NOTE: gamma = 0 is equivalent to the prev setup
         if self.method == 'no_A':
             output = parents_val
-        elif self.method == 'binary':
-            neigbours_val = torch.Tensor(self.A_mean).mm(parents_val)
-#            neigbours_val = torch.Tensor(self.A/np.sum(self.A,0)).mm(parents_val)
-            output = self.gamma*parents_val + (1-self.gamma)*neigbours_val
-        elif self.method == 'weighted':
+        elif self.method == 'binary' or self.method == 'weighted':
             neigbours_val = torch.Tensor(self.A_mean).mm(parents_val)
             output =  self.gamma*parents_val + (1-self.gamma)*neigbours_val
         elif self.method == 'original':
@@ -150,6 +147,6 @@ class GraphUpsampling(nn.Module):
                                     mode='linear', align_corners=True)
         else:
             raise RuntimeError('Unknown sampling method')
-        return output.view(1, n_channels, self.child_size)
 
+        return output.t().view(1, n_channels, self.child_size)
 

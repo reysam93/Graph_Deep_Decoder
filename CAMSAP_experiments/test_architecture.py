@@ -23,10 +23,11 @@ batch_norm = True
 act_fun = nn.ReLU()
 up_method = 'weighted'
 gamma = 0.5
-type_z = 'alternated'
+type_z = 'random'
 last_act_fun = nn.Sigmoid()
 
 # Constants
+N_CPUS = cpu_count()-1
 SAVE = False
 SEED = 15
 N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
@@ -136,13 +137,13 @@ if __name__ == '__main__':
     G = utils.create_graph(G_params, SEED, type_z=type_z)
     sizes, descendances, hier_As = compute_clusters(G, alg, G_params['k'])
 
-
+    print("CPUs used:", N_CPUS)
     start_time = time.time()
     error = np.zeros((len(N_P), n_signals, N_EXPS))
     for i, n_p in enumerate(N_P):
         print('Noise:', n_p)
         results = []
-        with Pool(processes=cpu_count()) as pool:
+        with Pool(processes=N_CPUS) as pool:
             for j in range(n_signals):
                 signal = gs.DifussedSparseGS(G,L,G_params['k'])
                 signal.signal_to_0_1_interval()

@@ -16,6 +16,7 @@ N_SIGNALS = 100
 SEED = 15
 N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
 SAVE = False
+N_CPUS = cpu_count()-1
 
 INPUTS = [gs.LINEAR, gs.MEDIAN]
 EXPERIMENTS = ['bandlimited',
@@ -104,7 +105,7 @@ if __name__ == '__main__':
     data['batch_norm'] = True
     data['EXPERIMENTS'] = EXPERIMENTS
     data['INPUTS'] = INPUTS
-    data['type_z'] = 'alternated'
+    data['type_z'] = 'random'
     
     # Graph parameters
     G_params = {}
@@ -125,11 +126,12 @@ if __name__ == '__main__':
     sizes, descendances, hier_As = compute_clusters(G, G_params['k'])
     data['g_params'] = G_params
 
+    print("CPUs used:", N_CPUS)
     error = np.zeros((len(N_P), N_SIGNALS, N_EXPS))
     for i, n_p in enumerate(N_P):
         print('Noise:', n_p)
         results = []
-        with Pool(processes=cpu_count()) as pool:
+        with Pool(processes=N_CPUS) as pool:
             for j in range(N_SIGNALS):
                 signals = [create_signal(s_in,G,L,k,D).x for s_in in INPUTS]
                 results.append(pool.apply_async(test_input,

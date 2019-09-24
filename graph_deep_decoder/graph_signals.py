@@ -123,7 +123,7 @@ class DifussedSparseGS(GraphSignal):
         delta_values = np.random.randn(self.n_deltas)*step/4 + delta_means
 
         # Randomly assign delta value to comm nodes
-        self.s = np.zeros((self.G.W.shape[0]))
+        self.s = np.zeros((self.G.N))
         for delta in range(self.n_deltas):
             comm_i = delta % self.G.info['comm_sizes'].size
             comm_nodes, = np.asarray(self.G.info['node_com']==comm_i).nonzero()
