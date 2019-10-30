@@ -27,17 +27,16 @@ alg = 'spectral_clutering'
 linkage = 'average'
 n_chans = [3,3,3]
 last_act_fun = nn.Sigmoid()
-
+act_fun = nn.ReLU()
 
 # Constants
-N_CPUS = cpu_count()-1
-SAVE = False
-SEED = 15
-N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
+N_CPUS = cpu_count()
+SAVE = True
+SEED = 10
+N_P = [0, .1, .2, .3, .4, .5]
 
 EXPERIMENTS = [[None, None], ['original', None], ['no_A', None],
-              ['binary', .5], ['weighted', 0], ['weighted', .25],
-              ['weighted', .5], ['weighted', .75]]
+              ['binary', .5], ['weighted', .5]]
 
 """
 EXPERIMENTS = [[None, None], ['original', None], ['no_A', None],
@@ -67,7 +66,7 @@ def test_upsampling(id, x, sizes, descendances, hier_As, n_p):
         dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
                         n_channels=n_chans, upsampling=EXPERIMENTS[i][0], 
                         batch_norm=batch_norm, last_act_fun=last_act_fun,
-                        gamma=EXPERIMENTS[i][1])
+                        gamma=EXPERIMENTS[i][1], act_fun=act_fun)
 
         dec.build_network()
         x_est, mse_fit[i] = dec.fit(x_n)

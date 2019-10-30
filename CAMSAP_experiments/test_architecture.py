@@ -28,12 +28,11 @@ last_act_fun = nn.Sigmoid()
 
 # Constants
 N_CPUS = cpu_count()-1
-SAVE = False
+SAVE = True
 SEED = 15
-N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
+N_P = [0, .1, .2, .3, .4, .5]
 EXPERIMENTS = [{'n_chans': [6]*3, 'n_clusts': [4,16,64,256]},
                {'n_chans': [4]*4, 'n_clusts': [4,16,32,64,256]},
-               {'n_chans': [4,4,3,3,2], 'n_clusts': [4,8,16,32,64,256]},
                {'n_chans': [3]*3, 'n_clusts': [4,16,64,256]},
                {'n_chans': [2]*6, 'n_clusts': [4,8,16,32,64,128,256]}]
 

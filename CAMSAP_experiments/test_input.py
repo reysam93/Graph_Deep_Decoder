@@ -14,9 +14,9 @@ import torch.nn as nn
 # Constants
 N_SIGNALS = 100
 SEED = 15
-N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
-SAVE = False
-N_CPUS = cpu_count()-1
+N_P = [0, .1, .2, .3, .4, .5]
+SAVE = True
+N_CPUS = cpu_count()
 
 INPUTS = [gs.LINEAR, gs.MEDIAN]
 EXPERIMENTS = ['bandlimited',

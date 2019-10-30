@@ -12,15 +12,18 @@ from scipy.io import loadmat
 from pygsp.graphs import Graph
 
 SEED = 15
-N_CPUS = cpu_count()-1
+N_CPUS = cpu_count()
 DATASET_PATH = 'dataset/graphs.mat'
 MAX_SIGNALS = 100
 MIN_SIZE = 50
 ATTR = 6
-N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4, .45, .5]
+N_P = [0, .1, .2, .3, .4, .5]
+
+
 EXPERIMENTS = ['bandlimited',
-               {'ups': 'original', 'arch': [3,3], 't': [4,16,None], 'gamma': None},
-               {'ups': 'weighted', 'arch': [3,3], 't': [4,16,None], 'gamma': 0.5}]
+               {'ups': 'original', 'arch': [3,3], 't': [24,48,None], 'gamma': None},
+               {'ups': 'weighted', 'arch': [3,3], 't': [24,48,None], 'gamma': 0}]
+
 # Architecture
 BATCH_NORM = True
 LAST_ACT_FUN = nn.Tanh()
@@ -85,8 +88,8 @@ def denoise_real(id, x, sizes, descendances, hier_As, n_p, V):
     error = np.zeros(N_EXPS)
     x_n = gs.GraphSignal.add_noise(x, n_p)
     for i, exp in enumerate(EXPERIMENTS):
-        if not isinstance(exp,dict):
-            x_est = utils.bandlimited_model(x_n, V, n_coefs=N_PARAMS)
+        if not isinstance(exp, dict):
+            x_est = utils.bandlimited_model(x_n, V, n_coefs=N_PARAMS, max_coefs=False)
             n_params = N_PARAMS
         else:
             dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
@@ -97,8 +100,8 @@ def denoise_real(id, x, sizes, descendances, hier_As, n_p, V):
             n_params = dec.count_params()
             x_est, _ = dec.fit(x_n, n_iter=4000)
         error[i] = np.sum(np.square(x-x_est))/np.square(np.linalg.norm(x))
-        print('Signal: {} Scenario {}: Error: {:.4f}, Params: {}'
-                            .format(id, i, error[i], n_params))
+        print('Signal: {} Scenario {}: Error: {:.4f}, Params: {}, N: {}'
+                            .format(id, i, error[i], n_params, x_n.size))
     return error
 
 def print_results(mse_est, n_p):
@@ -145,8 +148,7 @@ if __name__ == '__main__':
 
             for j in range(n_signals):
                 error[i,j,:] = results[j].get()
-
         print_results(error[i,:,:], n_p)
-    
+
     save_results(error)
     print('--- {} minutes ---'.format((time.time()-start_time)/60))
