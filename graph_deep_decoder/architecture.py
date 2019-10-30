@@ -65,10 +65,10 @@ class GraphDeepDecoder():
     def add_layer(self, module):
         self.model.add_module(str(len(self.model) + 1), module)
 
-    def fit(self, signal, mask=None, n_iter=2000):
+    def fit(self, signal, mask=None, n_iter=2000, lr=0.01, verbose=False, freq_eval=100):
         p = [x for x in self.model.parameters() ]
 
-        optimizer = torch.optim.Adam(p, lr=0.01)
+        optimizer = torch.optim.Adam(p, lr=lr)
         mse = torch.nn.MSELoss()
 
         if mask is not None:
@@ -93,6 +93,10 @@ class GraphDeepDecoder():
                 return loss
 
             loss = optimizer.step(closure)
+
+            if verbose and i % freq_eval == 0:
+                print('Epoch {}/{}: mse {}'
+                    .format(i,n_iter, loss.data))
 
             if best_mse > 1.005*loss.data:
                 best_mse = loss.data
