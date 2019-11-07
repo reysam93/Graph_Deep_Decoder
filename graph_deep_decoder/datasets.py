@@ -1,7 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.sparse.csgraph import dijkstra
+from pygsp.graphs import Graph, StochasticBlockModel, ErdosRenyi, BarabasiAlbert
 
-# Signals Type
+# Signals Type Constants
 LINEAR = 1
 NON_LINEAR = 2
 MEDIAN = 3
@@ -9,29 +11,98 @@ COMB = 4
 NOISE = 5
 NON_BL = 6
 
+# Graph Type Constants
+SBM = 1
+ER = 2
+BA = 3
+
+# Comm Node Assignment Constants
+CONT = 1    # Contiguous nodes
+ALT = 2    # Alternated nodes
+RAND = 3    # Random nodes
+
+
+def assign_nodes_to_comms(N, k):
+    """
+    Distribute contiguous nodes in the same community while assuring that all
+    communities have (approximately) the same number of nodes.
+    """
+    z = np.zeros(N, dtype=np.int)
+    leftover_nodes = N % k
+    grouped_nodes = 0
+    for i in range(k):
+        if leftover_nodes > 0:
+            n_nodes = np.ceil(N/k).astype(np.int)
+            leftover_nodes -= 1
+        else:
+            n_nodes = np.floor(N/k).astype(np.int)
+        z[grouped_nodes:(grouped_nodes+n_nodes)] = i
+        grouped_nodes += n_nodes
+    return z
+
+
+def create_graph(ps, seed=None):
+    """
+    Create a random graph using the parameters specified in the dictionary ps.
+    The keys that this dictionary should nclude are:
+        - type: model for the graph. Options are SBM (Stochastic Block Model)
+          or ER (Erdos-Renyi)
+        - N: number of nodes
+        - k: number of communities (for SBM only)
+        - p: edge probability for nodes in the same community
+        - q: edge probability for nodes in different communities (for SBM only)
+        - type_z: specify how to assigns nodes to communities (for SBM only).
+          Options are CONT (continous), ALT (alternating) and RAND (random)
+    """
+    if ps['type'] == SBM:
+        if ps['type_z'] == CONT:
+            z = assign_nodes_to_comms(ps['N'], ps['k'])
+        elif ps['type_z'] == ALT:
+            z = np.array(list(range(ps['k']))*int(ps['N']/ps['k']) +
+                         list(range(ps['N'] % ps['k'])))
+        elif ps['type_z'] == RAND:
+            z = assign_nodes_to_comms(ps['N'], ps['k'])
+            np.random.shuffle(z)
+        else:
+            z = None
+        G = StochasticBlockModel(N=ps['N'], k=ps['k'], p=ps['p'], z=z,
+                                 q=ps['q'], connected=True, seed=seed,
+                                 max_iter=20)
+        G.set_coordinates('community2D')
+        return G
+    elif ps['type'] == ER:
+        G = ErdosRenyi(N=ps['N'], p=ps['p'], connected=True, seed=seed,
+                       max_iter=20)
+        G.set_coordinates('community2D')
+        return G
+    elif ps['type'] == BA:
+        G = BarabasiAlbert(N=ps['N'], m=ps['m'], m0=ps['m0'], seed=seed)
+        G.info = {'comm_sizes': np.array([ps['N']]),
+                  'node_com': np.zeros((ps['N'],), dtype=int)}
+        G.set_coordinates('spring')
+        return G
+    else:
+        raise RuntimeError('Unknown graph type')
+
+
 class GraphSignal():
-    
     @staticmethod
     def create_graph_signal(signal_type, G, L, k, D):
         if signal_type == LINEAR:
-            signal = DifussedSparseGS(G,L,k)
+            signal = DifussedSparseGS(G, L, k)
         elif signal_type == NON_LINEAR:
-            signal = NonLinealDSGS(G,L,k,D)
+            signal = NonLinealDSGS(G, L, k, D)
         elif signal_type == MEDIAN:
-            signal = MedianDSGS(G,L,k)
+            signal = MedianDSGS(G, L, k)
         elif signal_type == COMB:
-            signal = NLCombinationsDSGS(G,L,k)
+            signal = NLCombinationsDSGS(G, L, k)
         elif signal_type == NOISE:
-            signal = DeterministicGS(G,np.random.randn(G.N))
+            signal = DeterministicGS(G, np.random.randn(G.N))
         elif signal_type == NON_BL:
             signal = NonBLMedian(G)
         else:
             raise RuntimeError('Unknown signal type')
         return signal
-
-    @staticmethod
-    def set_seed(seed):
-        np.random.seed(seed)
 
     @staticmethod
     def add_noise(x, n_p):
@@ -99,10 +170,12 @@ class GraphSignal():
         if show:
             plt.show()
 
+
 class DeterministicGS(GraphSignal):
     def __init__(self, G, x):
-       GraphSignal.__init__(self, G)
-       self.x = x 
+        GraphSignal.__init__(self, G)
+        self.x = x
+
 
 class DifussedSparseGS(GraphSignal):
     def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
@@ -131,13 +204,14 @@ class DifussedSparseGS(GraphSignal):
             selected_node = comm_nodes[rand_index]
             self.s[selected_node] = delta_values[comm_i]
 
+
 class NonLinealDSGS(DifussedSparseGS):
     def __init__(self, G, L, n_deltas, D=None, min_d=-1, max_d=1):
         if D is None:
             self.D = dijkstra(G.W)
         else:
             self.D = D
-        DifussedSparseGS.__init__(self,G,L,n_deltas,min_d,max_d)
+        DifussedSparseGS.__init__(self, G, L, n_deltas, min_d, max_d)
 
     """
     Create a non-linear random diffusing filter with L random coefficients.
@@ -148,27 +222,29 @@ class NonLinealDSGS(DifussedSparseGS):
         self.H = np.zeros(self.G.W.shape)
         for l in range(L):
             L_Neighbours = np.zeros(self.G.W.shape)
-            L_Neighbours[self.D==l] = 1
-            self.H += np.power(decay_coeff,l)*L_Neighbours
+            L_Neighbours[self.D == l] = 1
+            self.H += np.power(decay_coeff, l)*L_Neighbours
+
 
 class MedianDSGS(DifussedSparseGS):
     def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
-        DifussedSparseGS.__init__(self,G,L,n_deltas,min_d,max_d)
+        DifussedSparseGS.__init__(self, G, L, n_deltas, min_d, max_d)
         self.median_neighbours_nodes()
+
 
 class MeanMedianDSGS(DifussedSparseGS):
     def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
-        DifussedSparseGS.__init__(self,G,L,n_deltas,min_d,max_d)
+        DifussedSparseGS.__init__(self, G, L, n_deltas, min_d, max_d)
         self.mean_neighbours_nodes()
-        mean_x = self.x        
+        mean_x = self.x
         self.median_neighbours_nodes()
-        self.x = self.x * mean_x 
-        #self.x = self.x*x_aux
-        
+        self.x = self.x * mean_x
+        # self.x = self.x*x_aux
+
 
 class NLCombinationsDSGS(DifussedSparseGS):
     def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
-        DifussedSparseGS.__init__(self,G,L,n_deltas,min_d,max_d)
+        DifussedSparseGS.__init__(self, G, L, n_deltas, min_d, max_d)
         self.nl_combs = [np.min, np.mean, np.median, np.max]
         self.nl_combinations_comm_nodes()
 
@@ -176,8 +252,9 @@ class NLCombinationsDSGS(DifussedSparseGS):
         for i in range(self.G.N):
             comm = self.G.info['node_com'][i]
             nonlinearity = self.nl_combs[comm % len(self.nl_combs)]
-            _, neighbours = np.asarray(self.G.W.todense()[i,:]!=0).nonzero()
+            _, neighbours = np.asarray(self.G.W.todense()[i, :] != 0).nonzero()
             self.x[neighbours] = nonlinearity(self.x[neighbours])
+
 
 class NonBLMedian(GraphSignal):
     def __init__(self, G, min_mean=-1, max_mean=1):
@@ -190,6 +267,6 @@ class NonBLMedian(GraphSignal):
         self.G.compute_fourier_basis()
         x_freq = np.random.uniform(size=self.G.N)
         self.x = np.matmul(self.G.U,x_freq)
-        #self.random_diffusing_filter(2)
-        #self.x = np.asarray(self.H.dot(self.x))
+        # self.random_diffusing_filter(2)
+        # self.x = np.asarray(self.H.dot(self.x))
         self.median_neighbours_nodes()
