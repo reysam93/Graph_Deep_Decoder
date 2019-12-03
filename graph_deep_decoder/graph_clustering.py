@@ -4,6 +4,7 @@ from scipy.sparse.csgraph import dijkstra
 import matplotlib.pyplot as plt
 from pygsp.graphs import Graph
 
+from threading import RLock
 
 # Upsampling Method Constants
 NONE = 0
@@ -11,6 +12,9 @@ REG = 1
 NO_A = 2
 BIN = 3
 WEI = 4
+
+# Error constants
+ERR_NON_DEC_SIZE = "{} is not a valid size. All sizes must be non-decreasing"
 
 
 class MultiResGraphClustering():
@@ -29,8 +33,7 @@ class MultiResGraphClustering():
         # Check non-decreasing sizes
         for i in range(1, len(n_clusts)):
             if n_clusts[i-1] > n_clusts[i]:
-                raise RuntimeError("{} is not a valid size. All sizes must be non-decreasing"
-                                   .format(n_clusts))
+                raise RuntimeError(ERR_NON_DEC_SIZE.format(n_clusts))
 
         self.G = G
         self.sizes = []

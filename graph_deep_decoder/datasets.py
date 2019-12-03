@@ -1,7 +1,8 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+from pygsp.graphs import (BarabasiAlbert, ErdosRenyi, Graph,
+                          StochasticBlockModel)
 from scipy.sparse.csgraph import dijkstra
-from pygsp.graphs import Graph, StochasticBlockModel, ErdosRenyi, BarabasiAlbert
 
 # Signals Type Constants
 LINEAR = 1
@@ -87,7 +88,7 @@ def create_graph(ps, seed=None):
 
 class GraphSignal():
     @staticmethod
-    def create_graph_signal(signal_type, G, L, k, D):
+    def create_graph_signal(signal_type, G, L, k, D=None):
         if signal_type == LINEAR:
             signal = DifussedSparseGS(G, L, k)
         elif signal_type == NON_LINEAR:
@@ -106,6 +107,8 @@ class GraphSignal():
 
     @staticmethod
     def add_noise(x, n_p):
+        if n_p == 0:
+            return x
         x_p = np.square(np.linalg.norm(x))
         return x + np.random.randn(x.size)*np.sqrt(n_p*x_p/x.size)
 
@@ -114,45 +117,30 @@ class GraphSignal():
         mask = np.ones(x.size)
         mask[np.random.choice(x.size, int(x.size*p_miss))] = 0
         return mask
-    
-    # NOTE: make static method for giving objct
-    # from desired signal class? --> method create_signal
+
     def __init__(self, G):
         self.G = G
         self.x = None
         self.x_n = None
 
-
-    """
-    Create a lineal random diffusing filter with L random coefficients  
-    """
-    def random_diffusing_filter(self, L):
-        # NOTE: One filter or one per comm??
-        hs = np.random.rand(L)
-        self.H = np.zeros(self.G.W.shape)
-        S = self.G.W.todense()
-        for l in range(L):
-            self.H += hs[l]*np.linalg.matrix_power(S,l)
-
     def median_neighbours_nodes(self):
         x_aux = np.zeros(self.x.shape)
         for i in range(self.G.N):
-            _, neighbours = np.asarray(self.G.W.todense()[i,:]!=0).nonzero()
-            x_aux[i] = np.median(self.x[neighbours])
+            _, neighbours = np.asarray(self.G.W.todense()[i, :] != 0).nonzero()
+            x_aux[i] = np.median(self.x[np.append(neighbours, i)])
         self.x = x_aux
 
     def mean_neighbours_nodes(self):
         x_aux = np.zeros(self.x.shape)
         for i in range(self.G.N):
-            _, neighbours = np.asarray(self.G.W.todense()[i,:]!=0).nonzero()
-            x_aux[i] = np.mean(self.x[neighbours])
+            _, neighbours = np.asarray(self.G.W.todense()[i, :] != 0).nonzero()
+            x_aux[i] = np.mean(self.x[np.append(neighbours, i)])
         self.x = x_aux
 
     def signal_to_0_1_interval(self):
         min_x = np.amin(self.x)
         if min_x < 0:
             self.x -= np.amin(self.x)
-        
         self.x = self.x / np.amax(self.x)
 
     def normalize(self):
@@ -185,24 +173,49 @@ class DifussedSparseGS(GraphSignal):
         self.random_diffusing_filter(L)
         self.x = np.asarray(self.H.dot(self.s))
 
-    """
-    Create random sparsee signal s composed of different deltas placed in the different
-    communities of the graph, which is supposed to follow an SBM
-    """
+    def random_diffusing_filter(self, L):
+        """
+        Create a lineal random diffusing filter with L random coefficients
+        """
+        hs = np.random.rand(L)
+        self.H = np.zeros(self.G.W.shape)
+        S = self.G.W.todense()
+        for l in range(L):
+            self.H += hs[l]*np.linalg.matrix_power(S, l)
+
     def random_sparse_s(self, min_delta, max_delta):
+        """
+        Create random sparse signal s composed of deltas placed in the
+        different communities of the graph if more than one community
+        exists. Otherwise, deltas are randomly placed.
+        """
         # Create delta values
-        step = (max_delta-min_delta)/(self.n_deltas-1)
+        n_comms = self.G.info['comm_sizes'].size
+        if n_comms > 1:
+            step = (max_delta-min_delta)/(n_comms-1)
+        else:
+            step = (max_delta-min_delta)/(self.n_deltas-1)
+
+        ds_per_comm = np.ceil(self.n_deltas/n_comms).astype(int)
         delta_means = np.arange(min_delta, max_delta+0.1, step)
-        delta_values = np.random.randn(self.n_deltas)*step/4 + delta_means
+        delta_means = np.tile(delta_means, ds_per_comm)[:self.n_deltas]
+        delta_vals = np.random.randn(self.n_deltas)*step/4 + delta_means
 
         # Randomly assign delta value to comm nodes
         self.s = np.zeros((self.G.N))
         for delta in range(self.n_deltas):
-            comm_i = delta % self.G.info['comm_sizes'].size
-            comm_nodes, = np.asarray(self.G.info['node_com']==comm_i).nonzero()
-            rand_index = np.random.randint(0,self.G.info['comm_sizes'][comm_i])
+            comm = delta % n_comms
+            comm_nodes, = np.asarray(self.G.info['node_com'] == comm).nonzero()
+            rand_index = np.random.randint(0, self.G.info['comm_sizes'][comm])
             selected_node = comm_nodes[rand_index]
-            self.s[selected_node] = delta_values[comm_i]
+            self.s[selected_node] = delta_vals[comm]
+
+    def plot(self, show=True):
+        _, axes = plt.subplots(1, 2)
+        self.G.plot_signal(self.s, ax=axes[0])
+        self.G.plot_signal(self.x, ax=axes[1])
+        if show:
+            plt.show()
 
 
 class NonLinealDSGS(DifussedSparseGS):
