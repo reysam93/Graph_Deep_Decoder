@@ -1,20 +1,23 @@
-import numpy as np
-from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
-from scipy.sparse.csgraph import dijkstra
-import matplotlib.pyplot as plt
-from pygsp.graphs import Graph
+from enum import Enum
 
-from threading import RLock
+import matplotlib.pyplot as plt
+import numpy as np
+from pygsp.graphs import Graph
+from scipy.cluster.hierarchy import dendrogram, fcluster, linkage
+from scipy.sparse.csgraph import dijkstra
+
 
 # Upsampling Method Constants
-NONE = 0
-REG = 1
-NO_A = 2
-BIN = 3
-WEI = 4
+class Ups(Enum):
+    NONE = 0
+    REG = 1
+    NO_A = 2
+    BIN = 3
+    WEI = 4
 
 # Error constants
 ERR_NON_DEC_SIZE = "{} is not a valid size. All sizes must be non-decreasing"
+ERR_UNK_UPS = 'Unkown upsampling method {}'
 
 
 class MultiResGraphClustering():
@@ -28,12 +31,15 @@ class MultiResGraphClustering():
     # k represents the size of the root cluster
     # TODO: if all have same size what happens??
     def __init__(self, G, n_clusts, k, algorithm='spectral_clutering',
-                 method='maxclust', link_fun='average', up_method=WEI):
+                 method='maxclust', link_fun='average', up_method=Ups.WEI):
 
         # Check non-decreasing sizes
         for i in range(1, len(n_clusts)):
             if n_clusts[i-1] > n_clusts[i]:
                 raise RuntimeError(ERR_NON_DEC_SIZE.format(n_clusts))
+
+        assert isinstance(up_method, Ups) or up_method is None, \
+            ERR_UNK_UPS.format(up_method)
 
         self.G = G
         self.sizes = []
@@ -130,7 +136,7 @@ class MultiResGraphClustering():
             self.Us.append(U)
 
     def compute_hierarchy_A(self, up_method):
-        if up_method in [None, NO_A, REG]:
+        if up_method in [None, Ups.NONE, Ups.NO_A, Ups.REG]:
             return
 
         A = self.G.W.todense()
@@ -147,13 +153,13 @@ class MultiResGraphClustering():
                     nodes_c2 = np.where(self.labels[i] == k+1)[0]
                     sub_A = A[nodes_c1, :][:, nodes_c2]
 
-                    if up_method == BIN and np.sum(sub_A) > 0:
+                    if up_method == Ups.BIN and np.sum(sub_A) > 0:
                         self.As[i][j, k] = self.As[i][k, j] = 1
-                    if up_method == WEI:
+                    if up_method == Ups.WEI:
                         self.As[i][j, k] = np.sum(sub_A)
                         self.As[i][k, j] = self.As[i][j, k]
                         inter_clust_links += np.sum(sub_A)
-            if up_method == WEI:
+            if up_method == Ups.WEI:
                 self.As[i] = self.As[i]/inter_clust_links
         return self.As
 

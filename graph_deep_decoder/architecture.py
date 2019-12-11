@@ -4,7 +4,7 @@ from torch import manual_seed, nn, Tensor, optim, no_grad
 import torch.nn as nn
 import numpy as np
 
-from graph_deep_decoder.graph_clustering import NONE, REG, NO_A, BIN, WEI
+from graph_deep_decoder.graph_clustering import Ups
 
 
 # Error messages
@@ -20,12 +20,13 @@ class GraphDeepDecoder(nn.Module):
                  # Decoder args
                  features, nodes, Us,
                  # Optional args
-                 As=None,  ups=WEI,
+                 As=None,  ups=Ups.WEI,
                  gamma=0.5, batch_norm=True,
                  # Activation functions
                  act_fn=nn.Tanh(), last_act_fn=nn.Tanh()):
         assert len(features) == len(nodes), ERR_DIFF_N_LAYERS
-        assert ups in [None, REG, NO_A, BIN, WEI], ERR_UNK_UPS.format(ups)
+        assert isinstance(ups, Ups) or ups is None, \
+            ERR_UNK_UPS.format(ups)
 
         super(GraphDeepDecoder, self).__init__()
         self.model = nn.Sequential()
@@ -41,7 +42,7 @@ class GraphDeepDecoder(nn.Module):
         self.last_act_fn = last_act_fn
         self.build_network()
 
-        if self.ups is not None:
+        if self.ups is not None and self.ups is not Ups.NONE:
             shape = [1, self.fts[0], self.nodes[0]]
         else:
             shape = [1, self.fts[0], self.nodes[-1]]
@@ -57,7 +58,7 @@ class GraphDeepDecoder(nn.Module):
                            self.kernel_size, bias=False))
 
             if self.nodes[l] < self.nodes[l+1]:
-                if self.As:
+                if self.As and self.ups != Ups.REG:
                     A = self.As[l+1-ups_skip]
                 else:
                     A = None
@@ -90,12 +91,12 @@ class GraphUpsampling(nn.Module):
     Use information from the agglomerative hierarchical clustering for
     doing the upsampling by creating the upsampling matrix U
     """
-    def __init__(self, U, A, gamma=0.5, method=WEI):
+    def __init__(self, U, A, gamma=0.5, method=Ups.WEI):
         # NOTE: gamma = 1 is equivalent to no_A
         super(GraphUpsampling, self).__init__()
         if A is not None:
             assert np.allclose(A, A.T), ERR_A_NON_SYM
-            assert method in [BIN, WEI], ERR_WRONG_METHOD
+            assert method in [Ups.BIN, Ups.WEI], ERR_WRONG_METHOD
             self.A = np.linalg.inv(np.diag(np.sum(A, 0))).dot(A)
             self.A = gamma*np.eye(A.shape[0]) + (1-gamma)*self.A
             self.A = Tensor(self.A)
@@ -108,13 +109,13 @@ class GraphUpsampling(nn.Module):
 
     def forward(self, input):
         assert input.shape[0] == 1, ERR_WRONG_INPUT_SIZE
-        if self.method == REG:
+        if self.method == Ups.REG:
             sf = self.child_size/self.parent_size
             return nn.functional.interpolate(input, scale_factor=sf,
                                              mode='linear',
                                              align_corners=True)
         n_channels = input.shape[1]
-        if self.method in [NO_A, BIN, WEI]:
+        if self.method in [Ups.NO_A, Ups.BIN, Ups.WEI]:
             output = input[0, :, :].mm(self.U_T)
         else:
             raise RuntimeError(ERR_UNK_UPS.format(self.method))

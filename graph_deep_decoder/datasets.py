@@ -1,25 +1,38 @@
+from enum import Enum
+
 import matplotlib.pyplot as plt
 import numpy as np
 from pygsp.graphs import (BarabasiAlbert, ErdosRenyi, Graph,
                           StochasticBlockModel)
 from scipy.sparse.csgraph import dijkstra
 
+
 # Signals Type Constants
-LINEAR = 1
-NON_LINEAR = 2
-MEDIAN = 3
-COMB = 4
-NOISE = 5
-NON_BL = 6
+class SigType(Enum):
+    NOISE = 1   # White Noise
+    DS = 2      # Diffused Sparse
+    DW = 3      # Diffused White Noise
+    SM = 4      # Smooth
+    NON_BL = 5   # Non Bandlimited
+
+
+class NonLin(Enum):
+    NONE = 0
+    MEDIAN = 1
+    SQUARE = 2
+    MIN_MAX = 3
+
 
 # Graph Type Constants
 SBM = 1
 ER = 2
 BA = 3
 
+MAX_RETRIES = 20
+
 # Comm Node Assignment Constants
 CONT = 1    # Contiguous nodes
-ALT = 2    # Alternated nodes
+ALT = 2     # Alternated nodes
 RAND = 3    # Random nodes
 
 
@@ -68,42 +81,49 @@ def create_graph(ps, seed=None):
             z = None
         G = StochasticBlockModel(N=ps['N'], k=ps['k'], p=ps['p'], z=z,
                                  q=ps['q'], connected=True, seed=seed,
-                                 max_iter=20)
-        G.set_coordinates('community2D')
-        return G
+                                 max_iter=MAX_RETRIES)
     elif ps['type'] == ER:
         G = ErdosRenyi(N=ps['N'], p=ps['p'], connected=True, seed=seed,
-                       max_iter=20)
-        G.set_coordinates('community2D')
-        return G
+                       max_iter=MAX_RETRIES)
     elif ps['type'] == BA:
         G = BarabasiAlbert(N=ps['N'], m=ps['m'], m0=ps['m0'], seed=seed)
         G.info = {'comm_sizes': np.array([ps['N']]),
                   'node_com': np.zeros((ps['N'],), dtype=int)}
-        G.set_coordinates('spring')
-        return G
     else:
         raise RuntimeError('Unknown graph type')
 
+    assert G.is_connected(), 'Graph is not connected'
+
+    G.set_coordinates('spring')
+    G.compute_fourier_basis()
+    return G
+
 
 class GraphSignal():
+    # TODO: add nonlinearity option!
     @staticmethod
-    def create_graph_signal(signal_type, G, L, k, D=None):
-        if signal_type == LINEAR:
-            signal = DifussedSparseGS(G, L, k)
-        elif signal_type == NON_LINEAR:
-            signal = NonLinealDSGS(G, L, k, D)
-        elif signal_type == MEDIAN:
-            signal = MedianDSGS(G, L, k)
-        elif signal_type == COMB:
-            signal = NLCombinationsDSGS(G, L, k)
-        elif signal_type == NOISE:
+    def create(signal_type, G, non_lin,
+               L=6, deltas=4, unit_norm=True,
+               to_0_1=False, D=None, pos_coefs=True):
+        if signal_type is SigType.NOISE:
             signal = DeterministicGS(G, np.random.randn(G.N))
-        elif signal_type == NON_BL:
-            signal = NonBLMedian(G)
+        elif signal_type is SigType.DS:
+            signal = DiffusedSparseGS(G, non_lin, L, deltas, pos_coefs)
+        elif signal_type is SigType.DW:
+            signal = DiffusedWhiteGS(G, non_lin, L, pos_coefs)
+        elif signal_type is SigType.SM:
+            signal = SmoothGS(G, non_lin)
+        elif signal_type is SigType.NON_BL:
+            signal = NonBandLimited(G, non_lin)
         else:
             raise RuntimeError('Unknown signal type')
+
+        if to_0_1:
+            signal.to_0_1_interval()
+        if unit_norm:
+            signal.to_unit_norm()
         return signal
+
 
     @staticmethod
     def add_noise(x, n_p):
@@ -123,28 +143,42 @@ class GraphSignal():
         self.x = None
         self.x_n = None
 
-    def median_neighbours_nodes(self):
+    def random_diffusing_filter(self, L, pos_coefs):
+        """
+        Create a lineal random diffusing filter with L random coefficients
+        """
+        if pos_coefs:
+            hs = np.random.rand(L)  # Uniform [0, 1]
+        else:
+            hs = np.random.rand(L)*2 - 1  # Uniform [-1, 1]
+        self.H = np.zeros(self.G.W.shape)
+        S = self.G.W.todense()
+        for l in range(L):
+            self.H += hs[l]*np.linalg.matrix_power(S, l)
+
+    def apply_non_linearity(self, nl_type):
+        if nl_type is NonLin.NONE or nl_type is None:
+            return
+
         x_aux = np.zeros(self.x.shape)
+        S = self.G.W.todense() + np.eye(self.G.N)
         for i in range(self.G.N):
-            _, neighbours = np.asarray(self.G.W.todense()[i, :] != 0).nonzero()
-            x_aux[i] = np.median(self.x[np.append(neighbours, i)])
+            _, neighbours_ind = np.asarray(S[i, :] != 0).nonzero()
+            neighbours = self.x[neighbours_ind]
+            if nl_type is NonLin.MEDIAN:
+                x_aux[i] = np.median(neighbours)
+            elif nl_type is NonLin.SQUARE:
+                x_aux[i] = np.sum(np.sign(neighbours)*(neighbours**2))
+            elif nl_type is NonLin.MIN_MAX:
+                x_aux[i] = neighbours[np.argmax(np.abs(neighbours))]
+
         self.x = x_aux
 
-    def mean_neighbours_nodes(self):
-        x_aux = np.zeros(self.x.shape)
-        for i in range(self.G.N):
-            _, neighbours = np.asarray(self.G.W.todense()[i, :] != 0).nonzero()
-            x_aux[i] = np.mean(self.x[np.append(neighbours, i)])
-        self.x = x_aux
-
-    def signal_to_0_1_interval(self):
+    def to_0_1_interval(self):
         min_x = np.amin(self.x)
         if min_x < 0:
             self.x -= np.amin(self.x)
         self.x = self.x / np.amax(self.x)
-
-    def normalize(self):
-        self.x = (self.x - np.mean(self.x))/np.std(self.x)
 
     def to_unit_norm(self):
         if np.linalg.norm(self.x) == 0:
@@ -153,8 +187,29 @@ class GraphSignal():
         self.x = self.x/np.linalg.norm(self.x)
 
     def plot(self, show=True):
-        self.G.set_coordinates(kind='community2D')
         self.G.plot_signal(self.x)
+        if show:
+            plt.show()
+
+    def smoothness(self):
+        """
+        Return the smoothness of the signal with respect to the graph.
+        """
+        return self.x.T.dot(self.G.L.dot(self.x))
+
+    def check_bandlimited(self, coefs=0.1):
+        n_coefs = int(self.G.N*coefs)
+        x_freq = self.G.U.T.dot(self.x)
+        return np.sum(np.sort(-np.abs(x_freq))[:n_coefs]**2)/np.sum(x_freq**2)
+
+    def plot_freq_resp(self, show=True):
+        """
+        Compute and plot the frequency response of the graph signal.
+        """
+        x_freq = self.G.U.T.dot(self.x)
+        _, axes = plt.subplots(1, 2)
+        axes[0].stem(x_freq)
+        self.G.plot_signal(x_freq, ax=axes[1])
         if show:
             plt.show()
 
@@ -165,23 +220,15 @@ class DeterministicGS(GraphSignal):
         self.x = x
 
 
-class DifussedSparseGS(GraphSignal):
-    def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
+class DiffusedSparseGS(GraphSignal):
+    def __init__(self, G, non_lin, L, n_deltas,
+                 pos_coefs=True, min_d=-1, max_d=1):
         GraphSignal.__init__(self, G)
         self.n_deltas = n_deltas
         self.random_sparse_s(min_d, max_d)
-        self.random_diffusing_filter(L)
+        self.random_diffusing_filter(L, pos_coefs)
         self.x = np.asarray(self.H.dot(self.s))
-
-    def random_diffusing_filter(self, L):
-        """
-        Create a lineal random diffusing filter with L random coefficients
-        """
-        hs = np.random.rand(L)
-        self.H = np.zeros(self.G.W.shape)
-        S = self.G.W.todense()
-        for l in range(L):
-            self.H += hs[l]*np.linalg.matrix_power(S, l)
+        self.apply_non_linearity(non_lin)
 
     def random_sparse_s(self, min_delta, max_delta):
         """
@@ -208,7 +255,7 @@ class DifussedSparseGS(GraphSignal):
             comm_nodes, = np.asarray(self.G.info['node_com'] == comm).nonzero()
             rand_index = np.random.randint(0, self.G.info['comm_sizes'][comm])
             selected_node = comm_nodes[rand_index]
-            self.s[selected_node] = delta_vals[comm]
+            self.s[selected_node] = delta_vals[delta]
 
     def plot(self, show=True):
         _, axes = plt.subplots(1, 2)
@@ -218,68 +265,35 @@ class DifussedSparseGS(GraphSignal):
             plt.show()
 
 
-class NonLinealDSGS(DifussedSparseGS):
-    def __init__(self, G, L, n_deltas, D=None, min_d=-1, max_d=1):
-        if D is None:
-            self.D = dijkstra(G.W)
-        else:
-            self.D = D
-        DifussedSparseGS.__init__(self, G, L, n_deltas, min_d, max_d)
+class DiffusedWhiteGS(GraphSignal):
+    def __init__(self, G, non_lin, L, pos_coefs=True):
+        GraphSignal.__init__(self, G)
+        self.s = np.random.randn(G.N)
+        self.random_diffusing_filter(L, pos_coefs)
+        self.x = np.asarray(self.H.dot(self.s))
+        self.apply_non_linearity(non_lin)
 
-    """
-    Create a non-linear random diffusing filter with L random coefficients.
-    Assumes the graph is binary
-    """
-    def random_diffusing_filter(self, L):
-        decay_coeff = 0.9
-        self.H = np.zeros(self.G.W.shape)
-        for l in range(L):
-            L_Neighbours = np.zeros(self.G.W.shape)
-            L_Neighbours[self.D == l] = 1
-            self.H += np.power(decay_coeff, l)*L_Neighbours
+    def plot(self, show=True):
+        _, axes = plt.subplots(1, 2)
+        self.G.plot_signal(self.s, ax=axes[0])
+        self.G.plot_signal(self.x, ax=axes[1])
+        if show:
+            plt.show()
 
 
-class MedianDSGS(DifussedSparseGS):
-    def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
-        DifussedSparseGS.__init__(self, G, L, n_deltas, min_d, max_d)
-        self.median_neighbours_nodes()
+class SmoothGS(GraphSignal):
+    def __init__(self, G, non_lin):
+        GraphSignal.__init__(self, G)
+        mean = np.zeros(G.N)
+        cov = np.linalg.pinv(np.diag(G.e))
+        self.s = np.random.multivariate_normal(mean, cov)
+        self.x = G.U.dot(self.s)
+        self.apply_non_linearity(non_lin)
 
 
-class MeanMedianDSGS(DifussedSparseGS):
-    def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
-        DifussedSparseGS.__init__(self, G, L, n_deltas, min_d, max_d)
-        self.mean_neighbours_nodes()
-        mean_x = self.x
-        self.median_neighbours_nodes()
-        self.x = self.x * mean_x
-        # self.x = self.x*x_aux
-
-
-class NLCombinationsDSGS(DifussedSparseGS):
-    def __init__(self, G, L, n_deltas, min_d=-1, max_d=1):
-        DifussedSparseGS.__init__(self, G, L, n_deltas, min_d, max_d)
-        self.nl_combs = [np.min, np.mean, np.median, np.max]
-        self.nl_combinations_comm_nodes()
-
-    def nl_combinations_comm_nodes(self):
-        for i in range(self.G.N):
-            comm = self.G.info['node_com'][i]
-            nonlinearity = self.nl_combs[comm % len(self.nl_combs)]
-            _, neighbours = np.asarray(self.G.W.todense()[i, :] != 0).nonzero()
-            self.x[neighbours] = nonlinearity(self.x[neighbours])
-
-
-class NonBLMedian(GraphSignal):
-    def __init__(self, G, min_mean=-1, max_mean=1):
-        GraphSignal.__init__(self,G)
-        self.n_comms = self.G.info['comm_sizes'].size
-        self.x_from_freq()
-        self.median_neighbours_nodes()
-
-    def x_from_freq(self):
-        self.G.compute_fourier_basis()
-        x_freq = np.random.uniform(size=self.G.N)
-        self.x = np.matmul(self.G.U,x_freq)
-        # self.random_diffusing_filter(2)
-        # self.x = np.asarray(self.H.dot(self.x))
-        self.median_neighbours_nodes()
+class NonBandLimited(GraphSignal):
+    def __init__(self, G, non_lin):
+        GraphSignal.__init__(self, G)
+        x_freq = np.random.rand(self.G.N)/2-0.25
+        self.x = np.dot(self.G.U, x_freq)
+        self.apply_non_linearity(non_lin)
