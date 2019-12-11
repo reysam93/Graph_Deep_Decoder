@@ -10,18 +10,6 @@ from scipy.sparse.csgraph import dijkstra
 from sklearn.cluster import AgglomerativeClustering
 
 
-def bandlimited_model(x_n, V, n_coefs=63, max_coefs=True):
-    """
-    Distribute contiguous nodes in the same community while assuring that all
-    communities have (approximately) the same number of nodes.
-    """
-    x_f = np.matmul(np.transpose(V), x_n)
-    if max_coefs:
-        max_indexes = np.argsort(-np.abs(x_f))[:n_coefs]
-        return np.matmul(V[:, max_indexes], x_f[max_indexes])
-    return np.matmul(V[:, 0:n_coefs], x_f[0:n_coefs])
-
-
 def plot_overfitting(err, err_val, show=True):
     fig, ax = plt.subplots()
     ax.semilogy(err, label='Train Err')
@@ -52,6 +40,8 @@ def save_results(file_pref, path, data, verbose=True):
     if not os.path.isdir(path):
         os.makedirs(path)
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
+    if path[-1] != '/':
+        path += '/'
     path = path + file_pref + timestamp
     np.save(path, data)
     if verbose:
@@ -72,7 +62,38 @@ def plot_results(err, x_axis, legend=None, fmts=None, x_label=None):
     plt.xlabel(x_label, fontsize=16)
     plt.ylabel('Median Error', fontsize=16)
     plt.gca().autoscale(enable=True, axis='x', tight=True)
+    plt.grid(True, which='both')
     if legend is not None:
         plt.legend(legend)
         # plt.legend(legend, prop={'size': 14})
     plt.show()
+
+
+def plot_from_file(file):
+    data = np.load(file).item()
+    err = data['err']
+    noise = data['Signals']['noise']
+    legend = data['legend']
+    fmts = data['fmts']
+    plot_results(err, noise, legend, fmts)
+
+
+def print_sumary(data):
+    print('Graph parameters:')
+    print(data['Gs'])
+    print('Signals parameters:')
+    print(data['Signals'])
+    print('Network parameters:')
+    print(data['Net'])
+    print('Experiments:')
+    print(data['exps'])
+
+
+def print_from_file(file):
+    data = np.load(file).item()
+    err = data['err']
+    node_err = data['node_err']
+    noise = data['Signals']['noise']
+    params = data['params']
+    print_sumary(data)
+    print_results(node_err, err, noise, params)
