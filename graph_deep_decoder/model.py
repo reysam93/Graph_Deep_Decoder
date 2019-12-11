@@ -12,7 +12,7 @@ ADAM = 0
 # TODO: maybe implement 2 models from this, one for denoising and other for inpainting
 class Model:
     def __init__(self, arch,
-                 learning_rate=0.01, decay_rate=0.99, loss_func=nn.MSELoss(),
+                 learning_rate=0.001, decay_rate=1, loss_func=nn.MSELoss(),
                  epochs=1000, eval_freq=100, verbose=False,
                  max_non_dec=10, opt=ADAM):
         assert opt in [SGD, ADAM], 'Unknown optimizer type'
@@ -84,4 +84,28 @@ class Model:
         node_err = self.loss(x_hat, Tensor(x)).detach().numpy()
         x_hat = x_hat.detach().numpy()
         err = np.sum((x_hat-x)**2)/np.linalg.norm(x)**2
+        return node_err, err
+
+
+class BLModel:
+    def __init__(self, V, coefs, max_coefs=True):
+        self.V = V
+        self.coefs = min(coefs, V.shape[0])
+        self.max_coefs = max_coefs
+        self.x_k = None
+
+    def count_params(self):
+        return self.coefs
+
+    def fit(self, signal):
+        x_f = self.V.T.dot(signal)
+        if self.max_coefs:
+            max_indexes = np.argsort(-np.abs(x_f))[:self.coefs]
+            self.x_k = self.V[:, max_indexes].dot(x_f[max_indexes])
+        else:
+            self.x_k = self.V[:, 0:self.coefs].dot(x_f[0:self.coefs])
+
+    def test(self, x):
+        err = np.sum((self.x_k-x)**2)/np.linalg.norm(x)**2
+        node_err = err/x.size
         return node_err, err
