@@ -7,17 +7,16 @@ from scipy.cluster.hierarchy import dendrogram, fcluster, linkage
 from scipy.sparse.csgraph import dijkstra
 
 
-# Upsampling Method Constants
-class Ups(Enum):
+class Type_A(Enum):
     NONE = 0
-    REG = 1
-    NO_A = 2
-    BIN = 3
-    WEI = 4
+    BIN = 1
+    WEI = 2
+
 
 # Error constants
 ERR_NON_DEC_SIZE = "{} is not a valid size. All sizes must be non-decreasing"
-ERR_UNK_UPS = 'Unkown upsampling method {}'
+ERR_DIFF_SIZE = "Last number of clusters ({}) must match graph size ({})"
+ERR_UNK_UPS = 'Unkown type of A: {}'
 
 
 class MultiResGraphClustering():
@@ -29,17 +28,11 @@ class MultiResGraphClustering():
     may be estimated for going from different levels of the hierarchy.
     """
     # k represents the size of the root cluster
-    # TODO: if all have same size what happens??
     def __init__(self, G, n_clusts, k, algorithm='spectral_clutering',
-                 method='maxclust', link_fun='average', up_method=Ups.WEI):
+                 method='maxclust', link_fun='average', type_A=Type_A.WEI):
 
-        # Check non-decreasing sizes
-        for i in range(1, len(n_clusts)):
-            if n_clusts[i-1] > n_clusts[i]:
-                raise RuntimeError(ERR_NON_DEC_SIZE.format(n_clusts))
-
-        assert isinstance(up_method, Ups) or up_method is None, \
-            ERR_UNK_UPS.format(up_method)
+        assert isinstance(type_A, Type_A) or type_A is None, \
+            ERR_UNK_UPS.format(type_A)
 
         self.G = G
         self.sizes = []
@@ -52,9 +45,21 @@ class MultiResGraphClustering():
         self.descendances = []
         self.Us = []
 
+        # Check correct sizes
+        for i in range(1, len(n_clusts)):
+            if n_clusts[i-1] > n_clusts[i]:
+                raise RuntimeError(ERR_NON_DEC_SIZE.format(n_clusts))
+        assert n_clusts[-1] == G.N, ERR_DIFF_SIZE.format(n_clusts[-1], G.N)
+
+        non_rep_sizes = list(dict.fromkeys(n_clusts))
+        if len(non_rep_sizes) == 1:
+            self.sizes = n_clusts
+            # print("WARNING: there will be no upsampling. Skipping clustering")
+            return
+
         self.compute_clusters(n_clusts, method)
-        self.compute_hierarchy_A(up_method)
         self.compute_Ups()
+        self.compute_hierarchy_A(type_A)
 
     def distance_clustering(self):
         """
@@ -135,8 +140,9 @@ class MultiResGraphClustering():
                 U[j, descendance[j]-1] = 1
             self.Us.append(U)
 
-    def compute_hierarchy_A(self, up_method):
-        if up_method in [None, Ups.NONE, Ups.NO_A, Ups.REG]:
+    # TODO: review method
+    def compute_hierarchy_A(self, A_type):
+        if A_type is None or A_type is Type_A.NONE:
             return
 
         A = self.G.W.todense()
@@ -153,13 +159,13 @@ class MultiResGraphClustering():
                     nodes_c2 = np.where(self.labels[i] == k+1)[0]
                     sub_A = A[nodes_c1, :][:, nodes_c2]
 
-                    if up_method == Ups.BIN and np.sum(sub_A) > 0:
+                    if A_type == Type_A.BIN and np.sum(sub_A) > 0:
                         self.As[i][j, k] = self.As[i][k, j] = 1
-                    if up_method == Ups.WEI:
+                    if A_type == Type_A.WEI:
                         self.As[i][j, k] = np.sum(sub_A)
                         self.As[i][k, j] = self.As[i][j, k]
                         inter_clust_links += np.sum(sub_A)
-            if up_method == Ups.WEI:
+            if A_type == Type_A.WEI:
                 self.As[i] = self.As[i]/inter_clust_links
         return self.As
 
@@ -176,7 +182,6 @@ class MultiResGraphClustering():
         _, axes = plt.subplots(2, len(self.As))
         for i in range(len(self.As)):
             G = Graph(self.As[i])
-            G.set_coordinates()
             axes[0, i].spy(self.As[i])
             G.plot(ax=axes[1, i])
         if show:

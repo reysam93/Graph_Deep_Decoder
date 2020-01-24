@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-PATH = '../results/'
+PATH = './results/'
 # file_name = 'denoising/denoise_N_256_2019_07_01-19_48.npy'
 
 class ExpPrinter():
@@ -199,7 +199,7 @@ class ExpPrinter():
             print()
 
 if __name__ == "__main__":
-    file_name = 'actfun_2019_07_07-23-39' #denoise_real_2019_07_11-13_51'
+    file_name = 'denoise_real_2019_09_30-20_21' #denoise_real_2019_07_11-13_51'
     printer = ExpPrinter(file_name)
     printer.print_summary()
 

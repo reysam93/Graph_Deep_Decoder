@@ -21,6 +21,8 @@ class NonLin(Enum):
     MEDIAN = 1
     SQUARE = 2
     MIN_MAX = 3
+    SQ_MED = 4
+    SQ2 = 5
 
 
 # Graph Type Constants
@@ -103,7 +105,7 @@ class GraphSignal():
     # TODO: add nonlinearity option!
     @staticmethod
     def create(signal_type, G, non_lin,
-               L=6, deltas=4, unit_norm=True,
+               L=6, deltas=4, unit_norm=True, center=False,
                to_0_1=False, D=None, pos_coefs=True):
         if signal_type is SigType.NOISE:
             signal = DeterministicGS(G, np.random.randn(G.N))
@@ -120,10 +122,11 @@ class GraphSignal():
 
         if to_0_1:
             signal.to_0_1_interval()
+        if center:
+            signal.center()
         if unit_norm:
             signal.to_unit_norm()
         return signal
-
 
     @staticmethod
     def add_noise(x, n_p):
@@ -167,18 +170,29 @@ class GraphSignal():
             neighbours = self.x[neighbours_ind]
             if nl_type is NonLin.MEDIAN:
                 x_aux[i] = np.median(neighbours)
-            elif nl_type is NonLin.SQUARE:
+            elif nl_type in [NonLin.SQUARE, NonLin.SQ_MED, NonLin.SQ2]:
                 x_aux[i] = np.sum(np.sign(neighbours)*(neighbours**2))
             elif nl_type is NonLin.MIN_MAX:
                 x_aux[i] = neighbours[np.argmax(np.abs(neighbours))]
+            else:
+                print('Unkown non-linearity.')
+                return
 
         self.x = x_aux
+
+        if nl_type is NonLin.SQ_MED:
+            self.apply_non_linearity(NonLin.MEDIAN)
+        elif nl_type is NonLin.SQ2:
+            self.apply_non_linearity(NonLin.SQUARE)
 
     def to_0_1_interval(self):
         min_x = np.amin(self.x)
         if min_x < 0:
             self.x -= np.amin(self.x)
         self.x = self.x / np.amax(self.x)
+
+    def center(self):
+        self.x = self.x - np.mean(self.x)
 
     def to_unit_norm(self):
         if np.linalg.norm(self.x) == 0:

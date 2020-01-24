@@ -8,7 +8,7 @@ sys.path.insert(0, '.')
 sys.path.insert(0, './graph_deep_decoder')
 from graph_deep_decoder import datasets as ds
 from graph_deep_decoder import graph_clustering as gc
-from graph_deep_decoder.architecture import GraphUpsampling
+from graph_deep_decoder.architecture import StandardUpsampling
 
 
 SEED = 15
@@ -53,7 +53,7 @@ class GraphClustSizesTest(unittest.TestCase):
         self.assertEqual(len([]), len(cluster.Us))
 
 
-class GraphUpsamplingMatricesTest(unittest.TestCase):
+class StandardUpsamplingMatricesTest(unittest.TestCase):
     def setUp(self):
         np.random.seed(SEED)
         self.G_params = {}
@@ -92,7 +92,7 @@ class GraphUpsamplingMatricesTest(unittest.TestCase):
         self.assertTrue(np.array_equal(out, cluster.labels[0]))
 
 
-class GraphUpsamplingModulesTest(unittest.TestCase):
+class StandardUpsamplingModulesTest(unittest.TestCase):
     def setUp(self):
         np.random.seed(SEED)
         G_params = {}
@@ -109,7 +109,7 @@ class GraphUpsamplingModulesTest(unittest.TestCase):
         self.cluster = gc.MultiResGraphClustering(G, nodes_dec, k=4)
         self.model = Sequential()
         for i, U in enumerate(self.cluster.Us):
-            self.add_layer(GraphUpsampling(U, self.cluster.As[i+1], gamma=1))
+            self.add_layer(StandardUpsampling(U, self.cluster.As[i+1], gamma=1))
 
     def add_layer(self, module):
         self.model.add_module(str(len(self.model) + 1), module)

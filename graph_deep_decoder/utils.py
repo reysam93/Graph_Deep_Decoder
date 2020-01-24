@@ -2,19 +2,34 @@ import os
 import datetime
 
 import matplotlib.pyplot as plt
+from matplotlib import rc
 import numpy as np
 from pygsp.graphs import ErdosRenyi, Graph, StochasticBlockModel
 from scipy import sparse
 from scipy.cluster.hierarchy import dendrogram, fcluster, linkage
 from scipy.sparse.csgraph import dijkstra
+from scipy.io import loadmat
 from sklearn.cluster import AgglomerativeClustering
 
+from graph_deep_decoder import datasets as ds
 
-def plot_overfitting(err, err_val, show=True):
+
+def plot_overfitting(err, err_val, fmts, legend, show=True):
+    rc('text', usetex=True)
     fig, ax = plt.subplots()
-    ax.semilogy(err, label='Train Err')
-    ax.semilogy(err_val, label='Val Err')
+    # ax.semilogy(err, label='Train Err')
+    # ax.semilogy(err_val, label='Val Err')
+    # ax.legend()
+
+    for i in range(err.shape[1]):
+        label_train = 'Train: $||x_n-x_{est}||$ '
+        label_val = 'Val: $||x_0-x_{est}||$ '
+        ax.semilogy(err[:, i], fmts[i]+'-', label=label_train + legend[i])
+        ax.semilogy(err_val[:, i], fmts[i]+'--', label=label_val + legend[i])
+
     ax.legend()
+    plt.grid(True, which='both')
+    plt.tight_layout()
     if show:
         plt.show()
 
@@ -45,7 +60,7 @@ def save_results(file_pref, path, data, verbose=True):
     path = path + file_pref + timestamp
     np.save(path, data)
     if verbose:
-        print('SAVED as:', path)
+        print('SAVED as:', os.getcwd(), path)
 
 
 def plot_results(err, x_axis, legend=None, fmts=None, x_label=None):
@@ -69,8 +84,21 @@ def plot_results(err, x_axis, legend=None, fmts=None, x_label=None):
     plt.show()
 
 
-def plot_from_file(file):
+def remove_indexes(data, skip_indexes):
+    data['err'] = np.delete(data['err'], skip_indexes, axis=2)
+    skip_indexes.reverse()
+    for i in skip_indexes:
+        del data['legend'][i]
+        del data['fmts'][i]
+    return data
+
+
+def plot_from_file(file, skip=[]):
     data = np.load(file).item()
+
+    if skip:
+        data = remove_indexes(data, skip)
+
     err = data['err']
     noise = data['Signals']['noise']
     legend = data['legend']
@@ -97,3 +125,41 @@ def print_from_file(file):
     params = data['params']
     print_sumary(data)
     print_results(node_err, err, noise, params)
+
+
+def read_graphs(dataset_path, attr, min_size=50, max_signals=100,
+                to_0_1=False, center=False):
+    signals = []
+    Gs = []
+    g_sizes = []
+    gs_mat = loadmat(dataset_path)
+
+    for i, A in enumerate(gs_mat['cell_A']):
+        if len(signals) >= max_signals:
+            break
+        G = Graph(A[0])
+        if G.N < min_size or not G.is_connected():
+            continue
+
+        if gs_mat['cell_X'][0][0].shape[1] == 1:
+            signal = ds.DeterministicGS(G, gs_mat['cell_X'][i][0][:, 0])
+        else:
+            signal = ds.DeterministicGS(G, gs_mat['cell_X'][i][0][:, attr-1])
+
+        if np.linalg.norm(signal.x) == 0:
+            continue
+
+        if center:
+            signal.center()
+        if to_0_1:
+            signal.to_0_1_interval()
+        signal.to_unit_norm()
+
+        G.compute_fourier_basis()
+        G.set_coordinates('spring')
+        Gs.append(G)
+        g_sizes.append(G.N)
+        signals.append(signal)
+
+    print('Graphs read:', len(Gs), 'from:', i, 'mean size:', np.mean(g_sizes))
+    return Gs, signals
