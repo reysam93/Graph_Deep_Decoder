@@ -211,6 +211,12 @@ class GraphSignal():
         """
         return self.x.T.dot(self.G.L.dot(self.x))
 
+    def total_variation(self, norm=1):
+        A = self.G.W.toarray()
+        eig_vals, _ = np.linalg.eig(A)
+        A = A/np.max(np.abs(eig_vals))
+        return np.linalg.norm(self.x-A.dot(self.x), norm)**norm
+
     def check_bandlimited(self, coefs=0.1):
         n_coefs = int(self.G.N*coefs)
         x_freq = self.G.U.T.dot(self.x)

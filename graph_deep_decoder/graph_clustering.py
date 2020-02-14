@@ -151,7 +151,6 @@ class MultiResGraphClustering():
             N = sizes[i]
             self.As.append(np.zeros((N, N)))
 
-            # Normalize matrix A in here??
             inter_clust_links = 0
             for j in range(N-1):
                 nodes_c1 = np.where(self.labels[i] == j+1)[0]
@@ -182,6 +181,7 @@ class MultiResGraphClustering():
         _, axes = plt.subplots(2, len(self.As))
         for i in range(len(self.As)):
             G = Graph(self.As[i])
+            G.set_coordinates('spring')
             axes[0, i].spy(self.As[i])
             G.plot(ax=axes[1, i])
         if show:
