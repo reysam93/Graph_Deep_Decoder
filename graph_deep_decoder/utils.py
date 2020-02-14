@@ -95,7 +95,6 @@ def remove_indexes(data, skip_indexes):
 
 def plot_from_file(file, skip=[]):
     data = np.load(file).item()
-
     if skip:
         data = remove_indexes(data, skip)
 
@@ -103,7 +102,13 @@ def plot_from_file(file, skip=[]):
     noise = data['Signals']['noise']
     legend = data['legend']
     fmts = data['fmts']
-    plot_results(err, noise, legend, fmts)
+
+    if isinstance(noise, list):
+        plot_results(err, noise, legend, fmts)
+    else:
+        p_miss = data['Signals']['P_MISS']
+        x_label = 'Percentage of missing values'
+        plot_results(err, p_miss, legend, fmts, x_label=x_label)
 
 
 def print_sumary(data):
@@ -124,11 +129,15 @@ def print_from_file(file):
     noise = data['Signals']['noise']
     params = data['params']
     print_sumary(data)
-    print_results(node_err, err, noise, params)
+    if isinstance(noise, list):
+        print_results(node_err, err, noise, params)
+    else:
+        p_miss = data['Signals']['P_MISS']
+        print_results(node_err, err, p_miss, params)
 
 
 def read_graphs(dataset_path, attr, min_size=50, max_signals=100,
-                to_0_1=False, center=False):
+                to_0_1=False, center=False, max_size=None, max_smooth=None):
     signals = []
     Gs = []
     g_sizes = []
@@ -139,6 +148,8 @@ def read_graphs(dataset_path, attr, min_size=50, max_signals=100,
             break
         G = Graph(A[0])
         if G.N < min_size or not G.is_connected():
+            continue
+        if max_size and G.N > max_size:
             continue
 
         if gs_mat['cell_X'][0][0].shape[1] == 1:
@@ -155,6 +166,9 @@ def read_graphs(dataset_path, attr, min_size=50, max_signals=100,
             signal.to_0_1_interval()
         signal.to_unit_norm()
 
+        if max_smooth and signal.smoothness() > max_smooth:
+            continue
+
         G.compute_fourier_basis()
         G.set_coordinates('spring')
         Gs.append(G)
@@ -163,3 +177,7 @@ def read_graphs(dataset_path, attr, min_size=50, max_signals=100,
 
     print('Graphs read:', len(Gs), 'from:', i, 'mean size:', np.mean(g_sizes))
     return Gs, signals
+
+
+def plot_recov_signals(G, x, x_n, x_est):
+    pass
