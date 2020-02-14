@@ -10,8 +10,8 @@ from torch import manual_seed
 
 sys.path.insert(0, 'graph_deep_decoder')
 from graph_deep_decoder import datasets as ds
-from graph_deep_decoder.graph_clustering import Ups, MultiResGraphClustering
-from graph_deep_decoder.architecture import GraphDeepDecoder
+from graph_deep_decoder.graph_clustering import Type_A, MultiResGraphClustering
+from graph_deep_decoder.architecture import GraphDeepDecoder, Ups
 from graph_deep_decoder.model import Model, BLModel
 from graph_deep_decoder import utils
 
@@ -24,17 +24,44 @@ FILE_PREF = 'input_'
 
 SEED = 15
 N_P = [0, .1, .2, .3, .4, .5]
-SIGS = [{'type': ds.SigType.DS, 'non_lin': ds.NonLin.MEDIAN, 'fmt': '-'},
-        {'type': ds.SigType.DW, 'non_lin': ds.NonLin.SQUARE, 'fmt': '--'},
-        {'type': ds.SigType.SM, 'non_lin': ds.NonLin.MEDIAN, 'fmt': ':'},
-        {'type': ds.SigType.NOISE, 'non_lin': ds.NonLin.NONE, 'fmt': '-.'}]
 
-EXPS = [{'type': 'DD', 'ups': Ups.WEI, 'fts': [3]*5 + [1],
-         'nodes': [4, 16, 32] + [256]*3, 'epochs': 3000, 'fmt': 'o'},
-        {'type': 'DD', 'ups': Ups.WEI, 'fts': [15]*5 + [1],
-         'nodes': [4, 16, 32] + [256]*3, 'epochs': 500, 'fmt': 'P'},
-        {'type': 'DD', 'ups': Ups.WEI, 'fts': [15]*3 + [1],
-         'nodes': [4] + [256]*3, 'epochs': 500, 'fmt': 'X'}]
+SIGS = [{'type': ds.SigType.DW, 'non_lin': ds.NonLin.MEDIAN, 'fmt': '-'},
+        {'type': ds.SigType.DW, 'non_lin': ds.NonLin.SQ2, 'fmt': '--'},
+        # {'type': ds.SigType.NOISE, 'non_lin': ds.NonLin.NONE, 'fmt': '-.'},
+        ]
+
+EXPS = [{'type': 'DD', 'A': Type_A.WEI, 'ups': Ups.U_MEAN, 'fts': [15]*5 + [1],
+         'nodes': [4, 16, 32] + [256]*3, 'K': 0, 'epochs': 500, 'fmt': 'o'},
+        {'type': 'DD', 'A': Type_A.WEI,  'ups': Ups.GF, 'fts': [15]*5 + [1],
+         'nodes': [4, 16, 32] + [256]*3, 'K': 3, 'epochs': 500, 'fmt': 'P'},
+        {'type': 'DD', 'A': Type_A.NONE, 'ups': Ups.NONE, 'fts': [15]*5 + [1],
+         'nodes': [256]*6, 'epochs': 500, 'K': 0, 'fmt': 'v'},
+
+        {'type': 'DD', 'A': Type_A.WEI, 'ups': Ups.U_MEAN, 'fts': [6]*5 + [1],
+         'nodes': [4, 16, 32] + [256]*3, 'K': 0, 'epochs': 500, 'fmt': 'X'},
+        {'type': 'DD', 'A': Type_A.WEI,  'ups': Ups.GF, 'fts': [6]*5 + [1],
+         'nodes': [4, 16, 32] + [256]*3, 'K': 3, 'epochs': 500, 'fmt': '>'},
+        {'type': 'DD', 'A': Type_A.NONE, 'ups': Ups.NONE, 'fts': [6]*5 + [1],
+         'nodes': [256]*6, 'epochs': 500, 'K': 0, 'fmt': '^'}]
+
+# EXPERIMENTO ORIGINAL!
+# SIGS = [{'type': ds.SigType.DS, 'non_lin': ds.NonLin.NONE, 'fmt': '-'},
+#         {'type': ds.SigType.DS, 'non_lin': ds.NonLin.MEDIAN, 'fmt': '--'}, ]
+#         # {'type': ds.SigType.DW, 'non_lin': ds.NonLin.SQUARE, 'fmt': '--'},
+#         # {'type': ds.SigType.SM, 'non_lin': ds.NonLin.MEDIAN, 'fmt': ':'},
+#         # {'type': ds.SigType.NOISE, 'non_lin': ds.NonLin.NONE, 'fmt': '-.'}]
+
+# EXPS = [{'type': 'BL', 'params': 63, 'epochs': 0, 'fmt': 'o'},
+#         {'type': 'DD', 'ups': Ups.WEI, 'fts': [3]*5 + [1],
+#          'nodes': [4, 16, 32] + [256]*3, 'epochs': 300, 'fmt': 'X'},
+#         # {'type': 'DD', 'ups': Ups.REG, 'fts': [15]*3 + [1],
+#         #  'nodes': [4] + [256]*3, 'epochs': 3000, 'fmt': '^'},
+
+#         {'type': 'DD', 'ups': Ups.WEI, 'fts': [15]*5 + [1],
+#          'nodes': [4, 16, 32] + [256]*3, 'epochs': 250, 'fmt': 'P'},
+#         {'type': 'DD', 'ups': Ups.WEI, 'fts': [15]*3 + [1],
+#          'nodes': [4] + [256]*3, 'epochs': 250, 'fmt': 'v'}]
+
 N_EXPS = len(SIGS)*len(EXPS)
 
 
@@ -46,7 +73,7 @@ def compute_clusters(G, root_clusts):
             continue
 
         cluster = MultiResGraphClustering(G, exp['nodes'], root_clusts,
-                                          up_method=exp['ups'])
+                                          type_A=exp['A'])
         clusters.append(cluster)
     return clusters
 
@@ -72,11 +99,11 @@ def run(id, Gs, Signals, Net, n_p):
             else:
                 dec = GraphDeepDecoder(exp['fts'], clts[j].sizes, clts[j].Us,
                                        As=clts[j].As, ups=exp['ups'],
-                                       act_fn=Net['af'],
+                                       act_fn=Net['af'], K=exp['K'],
                                        last_act_fn=Net['laf'],
                                        batch_norm=Net['bn'])
                 model = Model(dec, learning_rate=Net['lr'],
-                              decay_rate=Net['dr'], epochs=exp['epochs'])
+                              epochs=exp['epochs'])
 
             params[cont] = model.count_params()
             model.fit(x_n)
@@ -95,7 +122,8 @@ def create_legend(params):
             if exp['type'] == 'BL':
                 txt = sig_txt + '{}, P: {}'.format(exp['type'], exp['params'])
             else:
-                txt = sig_txt + '{}, P: {}'.format(exp['ups'], params[j])
+                txt = sig_txt + '{}, A: {}, P: {}'.format(exp['ups'], exp['A'],
+                                                          params[j])
             legend.append(txt)
     return legend
 

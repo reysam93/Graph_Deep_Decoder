@@ -10,40 +10,47 @@ from torch import manual_seed
 
 sys.path.insert(0, 'graph_deep_decoder')
 from graph_deep_decoder import datasets as ds
-from graph_deep_decoder.graph_clustering import Ups, MultiResGraphClustering
-from graph_deep_decoder.architecture import GraphDeepDecoder
+from graph_deep_decoder.graph_clustering import Type_A, MultiResGraphClustering
+from graph_deep_decoder.architecture import GraphDeepDecoder, Ups
 from graph_deep_decoder.model import Inpaint
 from graph_deep_decoder import utils
 
 # Constants
-N_CPUS = 1  # cpu_count()
-SAVE = False
+N_CPUS = cpu_count()
+SAVE = True
 PATH = './results/inpaint/'
 FILE_PREF = 'inpaint_'
 SEED = 15
 
-P_MISS = [.1, .3]  # [0, .1, .2, .3, .4, .5]
+P_MISS = [0, .1, .2, .3, .4, .5]
 EXPS = [
-    {'ups': Ups.WEI, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
+    {'ups': Ups.U_MEAN, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
      'fts': [15]*5 + [1], 'epochs': 250, 'fmt': 'x-'},
-    {'ups': Ups.WEI, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
+    {'ups': Ups.U_MEAN, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
      'fts': [15]*5 + [1], 'epochs': 2500, 'fmt': 'x--'},
-    {'ups': Ups.REG, 'gamma': None, 'nodes': [4, 16, 32] + [256]*3,
-     'fts': [15]*5 + [1], 'epochs': 250, 'fmt': '^-'},
+
+    # Originals
+    {'ups': Ups.U_MEAN, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
+     'fts': [3]*5 + [1], 'epochs': 250, 'fmt': 'o-'},
+    {'ups': Ups.U_MEAN, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
+     'fts': [3]*5 + [1], 'epochs': 2500, 'fmt': 'o--'},
+
+    # {'ups': Ups.REG, 'gamma': None, 'nodes': [4, 16, 32] + [256]*3,
+    #  'fts': [15]*5 + [1], 'epochs': 250, 'fmt': '^-'},
     {'ups': Ups.NONE, 'gamma': None, 'nodes': [256]*6, 'fts': [15]*5 + [1],
      'epochs': 250, 'fmt': 'v-'},
     {'ups': Ups.NONE, 'gamma': None, 'nodes': [256]*6, 'fts': [15]*5 + [1],
      'epochs': 2500, 'fmt': 'v--'},
-    # Originals
-    {'ups': Ups.WEI, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
-     'fts': [3]*5 + [1], 'epochs': 250, 'fmt': 'o-'},
-    {'ups': Ups.WEI, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
-     'fts': [3]*5 + [1], 'epochs': 2500, 'fmt': 'o--'},
+
+    {'ups': Ups.NONE, 'gamma': 0.5, 'nodes': [256]*6,
+     'fts': [3]*5 + [1], 'epochs': 250, 'fmt': '^-'},
+    {'ups': Ups.NONE, 'gamma': 0.5, 'nodes': [256]*6,
+     'fts': [3]*5 + [1], 'epochs': 2500, 'fmt': '^--'},
 ]
 N_EXPS = len(EXPS)
 
 
-def compute_clusters(G, root_clusts, ups):
+def compute_clusters(G, root_clusts, type_A):
     nodes = []
     clusters = []
     for exp in EXPS:
@@ -52,7 +59,7 @@ def compute_clusters(G, root_clusts, ups):
             cluster = clusters[i]
         else:
             cluster = MultiResGraphClustering(G, exp['nodes'], root_clusts,
-                                              up_method=ups)
+                                              type_A=type_A)
         nodes.append(exp['nodes'])
         clusters.append(cluster)
     return clusters
@@ -60,7 +67,7 @@ def compute_clusters(G, root_clusts, ups):
 
 def run(id, Gs, Signals, Net, p_miss):
     G = ds.create_graph(Gs, SEED)
-    clts = compute_clusters(G, Gs['k'], Net['ups'])
+    clts = compute_clusters(G, Gs['k'], Net['type_A'])
     signal = ds.GraphSignal.create(Signals['type'], G, Signals['non_lin'],
                                    Signals['L'], Signals['deltas'],
                                    to_0_1=Signals['to_0_1'])
@@ -104,7 +111,7 @@ if __name__ == '__main__':
     # Graph parameters
     Gs = {}
     Gs['type'] = ds.SBM  # SBM or ER
-    Gs['n_graphs'] = 1  # 50
+    Gs['n_graphs'] = 50
     Gs['N'] = 256
     Gs['k'] = 4
     Gs['p'] = 0.25
@@ -117,7 +124,7 @@ if __name__ == '__main__':
     # Signal parameters
     Signals = {}
     Signals['n_signals'] = 1
-    Signals['type'] = ds.SigType.DS  # ds.SigType.DS
+    Signals['type'] = ds.SigType.DW  # ds.SigType.DS
     Signals['non_lin'] = ds.NonLin.MEDIAN  # ds.NonLin.MEDIAN
     Signals['deltas'] = Gs['k']
     Signals['L'] = 6
@@ -127,7 +134,7 @@ if __name__ == '__main__':
 
     # Net
     Net = {}
-    Net['ups'] = Ups.WEI
+    Net['type_A'] = Type_A.WEI
     Net['laf'] = nn.Tanh()
     Net['af'] = nn.Tanh()  # nn.CELU()
     Net['bn'] = True
@@ -157,7 +164,8 @@ if __name__ == '__main__':
 
     legend = create_legend(params)
     fmts = [exp['fmt'] for exp in EXPS]
-    utils.plot_results(err, P_MISS, legend=legend, fmts=fmts)
+    x_label = 'Percentage of missing values'
+    utils.plot_results(err, P_MISS, legend=legend, fmts=fmts, x_label=x_label)
     if SAVE:
         data = {
             'seed': SEED,

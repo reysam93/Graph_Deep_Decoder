@@ -1,152 +1,204 @@
-import os, sys
-import time, datetime
-from graph_deep_decoder import utils
-from graph_deep_decoder import graph_signals as gs
-from graph_deep_decoder.architecture import GraphDeepDecoder
+import datetime
+import os
+import sys
+import time
 from multiprocessing import Pool, cpu_count
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
 import torch.nn as nn
-from scipy.io import loadmat 
 from pygsp.graphs import Graph
+from scipy.io import loadmat
+from torch import manual_seed
+
+sys.path.insert(0, 'graph_deep_decoder')
+from graph_deep_decoder import datasets as ds
+from graph_deep_decoder.graph_clustering import Type_A, MultiResGraphClustering
+from graph_deep_decoder.architecture import GraphDeepDecoder, Ups
+from graph_deep_decoder.model import Model, BLModel
+from graph_deep_decoder import utils
+
+# Constants
+N_CPUS = cpu_count()
+SAVE = True
+PATH = './results/denoise_real/'
+FILE_PREF = 'denoise_real_'
 
 SEED = 15
-SAVE = False
-N_CPUS = cpu_count()-1
 DATASET_PATH = 'dataset/graphs.mat'
-MAX_SIGNALS = 100
+MAX_SIGNALS = 25  # 100
 MIN_SIZE = 50
+MAX_SIZE = 150
+MAX_SM = 3
 ATTR = 6
-N_P = [0, .05, .1, .15, .2, .25, .3, .35, .4]
-EXPERIMENTS = ['bandlimited',
-               {'ups': 'original', 'arch': [3,3], 't': [4,16,None], 'gamma': None},
-               {'ups': 'weighted', 'arch': [3,3], 't': [4,16,None], 'gamma': 0.5}]
-# Architecture
-BATCH_NORM = True
-LAST_ACT_FUN = nn.Tanh()
-ACT_FUN = nn.CELU()
-# Bandlimited
-N_PARAMS = 48
+N_P = [0, .1, .2, .3]  # [0, .1, .2, .3, .4, .5]
 
-N_EXPS = len(EXPERIMENTS)
+# Try removing None Layers
+# Con 30 params ha ganado [10, 25] + [None]*3, REPETIR
+EXPS = [
+        # Mejores resultado
+        # {'type': 'DD', 'A': Type_A.WEI, 'ups': Ups.U_MEAN, 'fts': [15]*4 + [1], 'K': 0,
+        #  'nodes': [32, 46] + [None]*3, 'gamma': 0.5, 'epochs': 1000, 'fmt': 'v-'},
+        # {'type': 'DD', 'A': Type_A.WEI, 'ups': Ups.U_MEAN, 'fts': [15]*4 + [1], 'gamma': 0.5,
+        #  'nodes': [10, 25] + [None]*3, 'K': 0, 'epochs': 1000, 'fmt': '^-'},
+        # {'type': 'DD', 'A': Type_A.NONE, 'ups': Ups.NONE, 'fts': [15]*4 + [1], 'gamma': 0.5,
+        #  'nodes': [None]*5, 'epochs': 1000, 'fmt': '<-'},
+        # {'type': 'DD', 'A': Type_A.WEI, 'ups': Ups.U_MEAN, 'fts': [3]*4 + [1], 'gamma': 0.5,
+        #  'nodes': [24, 48] + [None]*3, 'K': 0,  'epochs': 1000, 'fmt': 'o-'},
 
 
-def read_graphs():
-    signals = []
-    Gs = []
-    graphs_mat = loadmat(DATASET_PATH)
-    g_sizes = []
-    for i, A in  enumerate(graphs_mat['cell_A']):
-        if len(signals) >= MAX_SIGNALS:
-            break
-        G = Graph(A[0])
-        if G.N < MIN_SIZE or not G.is_connected():
-            continue
+        {'type': 'DD', 'A': Type_A.NONE, 'ups': Ups.NONE, 'fts': [6]*4 + [1], 'gamma': 0.5,
+         'nodes': [None]*5, 'K': 0, 'epochs': 1500, 'fmt': '<-'},
+
+        {'type': 'DD', 'A': Type_A.WEI, 'ups': Ups.GF, 'fts': [6]*5 + [1], 'K': 3,
+         'nodes': [4, 16, 32] + [None]*3, 'gamma': 0.5, 'epochs': 1500, 'fmt': 'o-'},
+        {'type': 'DD', 'A': Type_A.WEI, 'ups': Ups.U_MEAN, 'fts': [6]*5 + [1], 'K': 2,
+         'nodes': [4, 16, 32] + [None]*3, 'gamma': 0.5, 'epochs': 1500, 'fmt': 'o--'},
         
-        signal = gs.DeterministicGS(G, graphs_mat['cell_X'][i][0][:,ATTR])
-        if np.linalg.norm(signal.x) == 0:
-            continue
-        #signal.normalize()
-        #signal.signal_to_0_1_interval()
-        signal.to_unit_norm()
-        G.compute_fourier_basis()
-        Gs.append(G)
-        g_sizes.append(G.N) 
-        signals.append(signal)
+        {'type': 'DD', 'A': Type_A.WEI, 'ups': Ups.GF, 'fts': [6]*3 + [1], 'K': 5,
+         'nodes': [10] + [None]*3, 'gamma': 0.5, 'epochs': 1500, 'fmt': 'o-'},
+        {'type': 'DD', 'A': Type_A.WEI, 'ups': Ups.U_MEAN, 'fts': [6]*3 + [1], 'K': 2,
+         'nodes': [10] + [None]*3, 'gamma': 0.5, 'epochs': 1500, 'fmt': 'o--'},
 
-    print('Graphs readed:', len(Gs), 'from:',i, 'mean size:', np.mean(g_sizes))
-    return Gs, signals
+        {'type': 'DD', 'A': Type_A.WEI, 'ups': Ups.GF, 'fts': [6]*4 + [1], 'K': 3,
+         'nodes': [16, 32] + [None]*3, 'gamma': 0.5, 'epochs': 1500, 'fmt': 'o-'},
+        {'type': 'DD', 'A': Type_A.WEI, 'ups': Ups.U_MEAN, 'fts': [6]*4 + [1], 'K': 2,
+         'nodes': [16, 32] + [None]*3, 'gamma': 0.5, 'epochs': 1500, 'fmt': 'o--'},
+        ]
+N_EXPS = len(EXPS)
+
 
 def compute_clusters(Gs):
     sizes = []
-    descendances = []
-    hier_As = []
-
+    Us = []
+    As = []
     for i, G in enumerate(Gs):
         sizes.append([])
-        descendances.append([])
-        hier_As.append([])
-        for exp in EXPERIMENTS:
-            if not isinstance(exp,dict):
+        Us.append([])
+        As.append([])
+        for exp in EXPS:
+            if exp['type'] == 'BL':
                 sizes[i].append(None)
-                descendances[i].append(None)
-                hier_As[i].append(None)
+                Us[i].append(None)
+                As[i].append(None)
                 continue
 
-            exp['t'][-1] = G.N
-            root_clust = exp['arch'][0]
-            cluster = utils.MultiRessGraphClustering(G, exp['t'], root_clust)
-            sizes[i].append(cluster.clusters_size)
-            descendances[i].append(cluster.compute_hierarchy_descendance())
-            hier_As[i].append(cluster.compute_hierarchy_A(exp['ups']))
-    return sizes, descendances, hier_As
+            nodes = [G.N if n is None else n for n in exp['nodes']]
+            cluster = MultiResGraphClustering(G, nodes, nodes[0],
+                                              type_A=exp['A'])
+            sizes[i].append(cluster.sizes)
+            Us[i].append(cluster.Us)
+            As[i].append(cluster.As)
+    return sizes, Us, As
 
-def denoise_real(id, x, sizes, descendances, hier_As, n_p, V):
-    error = np.zeros(N_EXPS)
-    x_n = gs.GraphSignal.add_noise(x, n_p)
-    for i, exp in enumerate(EXPERIMENTS):
-        if not isinstance(exp,dict):
-            x_est = utils.bandlimited_model(x_n, V, n_coefs=N_PARAMS)
-            n_params = N_PARAMS
+
+def run(id, x, sizes, Us, As, n_p, Net, V):
+    node_err = np.zeros(N_EXPS)
+    err = np.zeros(N_EXPS)
+    params = np.zeros(N_EXPS)
+
+    x_n = ds.GraphSignal.add_noise(x, n_p)
+
+    for i, exp in enumerate(EXPS):
+        # Construct model
+        if exp['type'] == 'BL':
+            model = BLModel(V, exp['params'])
         else:
-            dec = GraphDeepDecoder(descendances[i], hier_As[i], sizes[i],
-                            n_channels=exp['arch'], upsampling=exp['ups'],
-                            gamma=exp['gamma'], last_act_fun=LAST_ACT_FUN,
-                            act_fun=ACT_FUN, batch_norm=BATCH_NORM)
-            dec.build_network()
-            n_params = dec.count_params()
-            x_est, _ = dec.fit(x_n, n_iter=4000)
-        error[i] = np.sum(np.square(x-x_est))/np.square(np.linalg.norm(x))
-        print('Signal: {} Scenario {}: Error: {:.4f}, Params: {}'
-                            .format(id, i, error[i], n_params))
-    return error
+            dec = GraphDeepDecoder(exp['fts'], sizes[i], Us[i],
+                                   As=As[i], ups=exp['ups'], K=exp['K'],
+                                   gamma=exp['gamma'], act_fn=Net['af'],
+                                   last_act_fn=Net['laf'],
+                                   batch_norm=Net['bn'])
+            model = Model(dec, learning_rate=Net['lr'],
+                          epochs=exp['epochs'])
+        params[i] = model.count_params()
+        model.fit(x_n)
+        node_err[i], err[i] = model.test(x)
+        print('Graph {}-{} ({}): N: {} Err: {:.6f}'
+              .format(id, i+1, params[i], x_n.shape[0],
+                      err[i]))
+    return node_err, err, params
 
-def print_results(mse_est, n_p):
-    mean_mse = np.mean(mse_est, axis=0)
-    median_mse = np.median(mse_est, axis=0)
-    std = np.std(mse_est, axis=0)
-    print('NOISE POWER:', n_p)
-    for i, exp in enumerate(EXPERIMENTS):
-        print('{}. (EXP {}) '.format(i, exp))
-        print('\tMean Error: {}\tMedian Error: {}\tSTD: {}'
-                    .format(mean_mse[i], median_mse[i], std[i]))
 
-def save_results(error):
-    if not os.path.isdir('./results/denoising'):
-        os.makedirs('./results/denoising')
-    timestamp = datetime.datetime.now().strftime("%Y_%m_%d-%H_%M")
-    data = {'error': error, 'EXPERIMENTS': EXPERIMENTS, 'N_P': N_P,
-            'SEED': SEED, 'natch_norm': BATCH_NORM, 'act_fun': ACT_FUN,
-            'last_act_fun': LAST_ACT_FUN}
-    path = './results/denoising/denoise_real_' + timestamp
-    np.save(path, data)
-    print('SAVED as:', path)
+def create_legend(params):
+    legend = []
+    for j, exp in enumerate(EXPS):
+        if exp['type'] == 'BL':
+            txt = '{}, P: {}'.format(exp['type'], exp['params'])
+        else:
+            txt = '{}-{}, K: {}, N: {}, P: {} E: {}'.format(exp['ups'].name,
+                                                            exp['A'].name,
+                                                            exp['K'],
+                                                            exp['nodes'],
+                                                            params[j],
+                                                            exp['epochs'])
+        legend.append(txt)
+    return legend
+
 
 if __name__ == '__main__':
-    # Set seeds
-    gs.GraphSignal.set_seed(SEED)
-    GraphDeepDecoder.set_seed(SEED)
-    
-    Gs, signals = read_graphs()
-    n_signals = len(signals)
-    sizes, descendances, hier_As = compute_clusters(Gs)
+    # Set random seed
+    np.random.seed(SEED)
+    manual_seed(SEED)
 
-    error = np.zeros((len(N_P), n_signals, N_EXPS))
+    # Signal parameters
+    Signals = {}
+    Signals['n_signals'] = None
+    Signals['noise'] = N_P
+    Signals['to_0_1'] = False
+    Signals['center'] = False
+
+    Net = {}
+    Net['laf'] = nn.Sigmoid()
+    Net['af'] = nn.CELU()
+    Net['bn'] = True
+    Net['lr'] = 0.005
+
+    Gs, signals = utils.read_graphs(DATASET_PATH, ATTR, MIN_SIZE, MAX_SIGNALS,
+                                    to_0_1=Signals['to_0_1'],
+                                    center=Signals['center'],
+                                    max_size=MAX_SIZE, max_smooth=MAX_SM)
+
+    Signals['n_signals'] = len(signals)
+    start_time = time.time()
+    sizes, Us, As = compute_clusters(Gs)
+    print('Clustering done in {} seconds.'.format((time.time()-start_time)))
+
+    print("CPUs used:", N_CPUS)
+    err = np.zeros((len(N_P), Signals['n_signals'], N_EXPS))
+    node_err = np.zeros((len(N_P), Signals['n_signals'], N_EXPS))
     start_time = time.time()
     for i, n_p in enumerate(N_P):
-        print('Noise:', n_p, "CPUs used:", N_CPUS)
+        print('Noise:', n_p)
         results = []
         with Pool() as pool:
-            for j in range(n_signals):
-                results.append(pool.apply_async(denoise_real,
-                        args=[j, signals[j].x, sizes[j], descendances[j],
-                                hier_As[j], n_p, Gs[j].U]))
+            for j in range(Signals['n_signals']):
+                results.append(pool.apply_async(run,
+                               args=[j, signals[j].x, sizes[j], Us[j],
+                                     As[j], n_p, Net, Gs[j].U]))
 
-            for j in range(n_signals):
-                error[i,j,:] = results[j].get()
+            for j in range(Signals['n_signals']):
+                node_err[i, j, :], err[i, j, :], params = results[j].get()
 
-        print_results(error[i,:,:], n_p)
-    
+        utils.print_partial_results(node_err[i, :, :], err[i, :, :], params)
+
+    utils.print_results(node_err, err, N_P, params)
+    print('--- {} hours ---'.format((time.time()-start_time)/3600))
+    legend = create_legend(params)
+    fmts = [exp['fmt'] for exp in EXPS]
+    utils.plot_results(err, N_P, legend=legend, fmts=fmts)
     if SAVE:
-        save_results(error)
-    print('--- {} minutes ---'.format((time.time()-start_time)/60))
+        data = {
+            'seed': SEED,
+            'exps': EXPS,
+            'Gs': [],
+            'dataset': DATASET_PATH,
+            'Signals': Signals,
+            'Net': Net,
+            'node_err': node_err,
+            'err': err,
+            'params': params,
+            'legend': legend,
+            'fmts': fmts,
+        }
+        utils.save_results(FILE_PREF, PATH, data)

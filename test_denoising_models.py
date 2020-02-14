@@ -1,8 +1,3 @@
-"""
-Check the efect of changing the size of the architecture for controlig the
-number of parameters which represent the signal
-"""
-
 import sys
 import os
 import time
@@ -17,89 +12,92 @@ sys.path.insert(0, '../graph_deep_decoder')
 from graph_deep_decoder import datasets as ds
 from graph_deep_decoder.graph_clustering import Type_A, MultiResGraphClustering
 from graph_deep_decoder.architecture import GraphDeepDecoder, Ups
-from graph_deep_decoder.model import Model
+from graph_deep_decoder.model import Model, MeanModel, TVModel, LRModel
 from graph_deep_decoder import utils
-
 
 # Constants
 N_CPUS = cpu_count()
 SAVE = True
-PATH = './results/arch/'
-FILE_PREF = 'arch_'
+PATH = './results/models/'
+FILE_PREF = 'models_'
 
 SEED = 15
 N_P = [0, .1, .2, .3, .4, .5]
 EXPS = [
-
-        {'fts': [50]*5 + [1], 'nodes': [4, 16, 32] + [256]*3, 'epochs': 250,
+        # [15] fts para DW-MED y [6] fts pra DW-SQ2
+        {'type': 'GDD', 'ups': Ups.U_MEAN, 'gamma': 0.5, 'K': None,
+         'nodes': [4, 16, 32] + [256]*3, 'fts': [6]*5 + [1], 'A': Type_A.WEI,
          'fmt': 'o-'},
-        {'fts': [50]*3 + [1], 'nodes': [4] + [256]*3, 'epochs': 250,
-         'fmt': 'v-'},
+        {'type': 'GDD', 'ups': Ups.GF, 'gamma': None, 'K': 3,
+         'nodes': [4, 16, 32] + [256]*3, 'fts': [6]*5 + [1], 'A': Type_A.WEI,
+         'fmt': 'P-'},
 
-        {'fts': [15]*5 + [1], 'nodes': [4, 16, 32] + [256]*3, 'epochs': 250,
-         'fmt': 'o--'},
-        {'fts': [15]*3 + [1], 'nodes': [4] + [256]*3, 'epochs': 250,
-         'fmt': 'v--'},
-
-        # {'fts': [10]*5 + [1], 'nodes': [4, 16, 32] + [256]*3, 'epochs': 250,
-        #  'fmt': 'o--'},
-        # {'fts': [10]*3 + [1], 'nodes': [4] + [256]*3, 'epochs': 250,
-        #  'fmt': 'v--'},
-
-        {'fts': [3]*5 + [1], 'nodes': [4, 16, 32] + [256]*3, 'epochs': 250,
-         'fmt': 'o:'},
-        {'fts': [3]*3 + [1], 'nodes': [4] + [256]*3, 'epochs': 250,
-         'fmt': 'v:'},
-        ]
-
+        # {'type': 'TV', 'alpha': 1, 'fmt': 'v--'},  # mejor en DW-MED
+        {'type': 'TV', 'alpha': 10, 'fmt': 'v--'},  # mejor en DW-SQ2
+        {'type': 'LR', 'alpha': 0.1, 'fmt': '^--'},  # mejor en DW-MED and DW-SQ2
+        {'type': 'Mean', 'fmt': 'X:'}
+       ]
 N_EXPS = len(EXPS)
 
 
-def compute_clusters(G, root_clusts, type_A):
-    nodes = []
+def compute_clusters(G, root_clusts):
     clusters = []
     for exp in EXPS:
-        if exp['nodes'] in nodes:
-            i = nodes.index(exp['nodes'])
-            cluster = clusters[i]
-        else:
-            cluster = MultiResGraphClustering(G, exp['nodes'], root_clusts,
-                                              type_A=type_A)
-        nodes.append(exp['nodes'])
+        if exp['type'] is not "GDD":
+            clusters.append([])
+            continue
+        cluster = MultiResGraphClustering(G, exp['nodes'], root_clusts,
+                                          type_A=exp['A'])
         clusters.append(cluster)
     return clusters
 
 
+def create_model(exp, G, clt, Net):
+    if exp['type'] is 'GDD':
+        dec = GraphDeepDecoder(exp['fts'], clt.sizes, clt.Us,
+                               As=clt.As, act_fn=Net['af'], ups=exp['ups'],
+                               gamma=exp['gamma'], batch_norm=Net['bn'],
+                               last_act_fn=Net['laf'], K=exp['K'])
+        return Model(dec, learning_rate=Net['lr'], epochs=Net['epochs'])
+    elif exp['type'] is 'TV':
+        return TVModel(G.W.toarray(), exp['alpha'])
+    elif exp['type'] is 'LR':
+        return LRModel(G.L.toarray(), exp['alpha'])
+    elif exp['type'] is 'Mean':
+        return MeanModel(G.W.toarray())
+
+
 def run(id, Gs, Signals, Net, n_p):
     G = ds.create_graph(Gs, SEED)
-    clts = compute_clusters(G, Gs['k'], Net['type_A'])
+    clts = compute_clusters(G, Gs['k'])
     signal = ds.GraphSignal.create(Signals['type'], G, Signals['non_lin'],
-                                   Signals['L'], Signals['deltas'],
-                                   to_0_1=Signals['to_0_1'])
+                                   Signals['L'], Signals['deltas'])
     x_n = ds.GraphSignal.add_noise(signal.x, n_p)
 
     err = np.zeros(N_EXPS)
     node_err = np.zeros(N_EXPS)
     params = np.zeros(N_EXPS)
-    for i in range(N_EXPS):
-        dec = GraphDeepDecoder(EXPS[i]['fts'], clts[i].sizes, clts[i].Us,
-                               As=clts[i].As, act_fn=Net['af'], ups=Net['ups'],
-                               batch_norm=Net['bn'], last_act_fn=Net['laf'])
-        model = Model(dec, learning_rate=Net['lr'], epochs=EXPS[i]['epochs'])
+    for i, exp in enumerate(EXPS):
+        model = create_model(exp, G, clts[i], Net)
         model.fit(x_n)
         node_err[i], err[i] = model.test(signal.x)
         params[i] = model.count_params()
-        print('Graph {}-{} ({}):\tEpochs: {}\tNode Err: {:.8f}\tErr: {:.6f}'
-              .format(id, i+1, params[i], EXPS[i]['epochs'], node_err[i],
-                      err[i]))
+        print('Graph {}-{}:\tNode Err: {:.8f}\tErr: {:.6f}'
+              .format(id, i+1, node_err[i], err[i]))
     return node_err, err, params
 
 
 def create_legend(params):
     legend = []
     for i, exp in enumerate(EXPS):
-        legend.append('N: {}, P: {}, E: {}'
-                      .format(exp['nodes'], params[i], exp['epochs']))
+        txt = exp['type'] + ', '
+        if exp['type'] is 'GDD':
+            txt += 'Ups: {}, G: {}, K: {}, P: {}'.format(exp['ups'].name,
+                                                         exp['gamma'],
+                                                         exp['K'], params[i])
+        elif exp['type'] in ['TV', 'LR']:
+            txt += 'Alpha: {}'.format(exp['alpha'])
+        legend.append(txt)
     return legend
 
 
@@ -123,22 +121,20 @@ if __name__ == '__main__':
 
     # Signal parameters
     Signals = {}
-    Signals['n_signals'] = 1
-    Signals['type'] = ds.SigType.DW  # ds.SigType.DS
-    Signals['non_lin'] = ds.NonLin.SQ2  # ds.NonLin.MEDIAN
+    Signals['n_signals'] = 1  # 50
+    Signals['type'] = ds.SigType.DW
+    Signals['non_lin'] = ds.NonLin.SQ2
     Signals['deltas'] = Gs['k']
     Signals['L'] = 6
     Signals['noise'] = N_P
-    Signals['to_0_1'] = False
+    Signals['missing'] = 0
 
-    # Net
     Net = {}
-    Net['type_A'] = Type_A.WEI
-    Net['ups'] = Ups.U_MEAN
     Net['laf'] = nn.Tanh()
     Net['af'] = nn.Tanh()  # nn.CELU()
     Net['bn'] = True
     Net['lr'] = 0.005
+    Net['epochs'] = 2500
 
     print("CPUs used:", N_CPUS)
     start_time = time.time()
@@ -160,6 +156,7 @@ if __name__ == '__main__':
     print('--- {} hours ---'.format((time.time()-start_time)/3600))
     legend = create_legend(params)
     fmts = [exp['fmt'] for exp in EXPS]
+    utils.plot_results(err, N_P, legend=legend, fmts=fmts)
     if SAVE:
         data = {
             'seed': SEED,
@@ -174,4 +171,3 @@ if __name__ == '__main__':
             'fmts': fmts,
         }
         utils.save_results(FILE_PREF, PATH, data)
-    utils.plot_results(err, N_P, legend=legend, fmts=fmts)

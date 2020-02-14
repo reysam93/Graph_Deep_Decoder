@@ -15,8 +15,8 @@ from torch import manual_seed
 
 sys.path.insert(0, '../graph_deep_decoder')
 from graph_deep_decoder import datasets as ds
-from graph_deep_decoder.graph_clustering import Ups, MultiResGraphClustering
-from graph_deep_decoder.architecture import GraphDeepDecoder
+from graph_deep_decoder.graph_clustering import Type_A, MultiResGraphClustering
+from graph_deep_decoder.architecture import GraphDeepDecoder, Ups
 from graph_deep_decoder.model import Model
 from graph_deep_decoder import utils
 
@@ -27,35 +27,58 @@ PATH = './results/ups/'
 FILE_PREF = 'ups_'
 
 SEED = 15
-N_P = [0, .1, .2, .3, .4, .5]
-EXPS = [{'ups': Ups.NONE, 'gamma': None, 'nodes': [256]*6, 'fts': [15]*5 + [1],
-         'fmt': 'v-'},
-        {'ups': Ups.REG, 'gamma': None, 'nodes': [4, 16, 32] + [256]*3,
-         'fts': [15]*5 + [1], 'fmt': '^-'},
-        {'ups': Ups.NO_A, 'gamma': None, 'nodes': [4, 16, 32] + [256]*3,
-         'fts': [15]*5 + [1], 'fmt': 'P-'},
-        {'ups': Ups.BIN, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
-         'fts': [15]*5 + [1], 'fmt': 'X-'},
-        {'ups': Ups.WEI, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
-         'fts': [15]*5 + [1], 'fmt': 'o-'},
+N_P = [0]#[0, .1, .2, .3, .4, .5]
+EXPS = [
+        {'ups': Ups.NONE, 'gamma': None, 'nodes': [256]*6, 'fts': [15]*5 + [1],
+         'type_A': Type_A.NONE,  'K': 0, 'fmt': 'v-'},
+        {'ups': Ups.U_MEAN, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
+         'type_A': Type_A.WEI, 'fts': [15]*5 + [1],  'K': 0, 'fmt': 'o-'},
+        {'ups': Ups.U_LM, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
+         'type_A': Type_A.WEI, 'fts': [15]*5 + [1],  'K': 0, 'fmt': '^-'},
+        {'ups': Ups.GF, 'gamma': None, 'nodes': [4, 16, 32] + [256]*3,
+         'type_A': Type_A.WEI, 'fts': [15]*5 + [1], 'K': 3, 'fmt': 'P-'},
 
-        {'ups': Ups.WEI, 'gamma': 0, 'nodes': [4, 16, 32] + [256]*3,
-         'fts': [15]*5 + [1], 'fmt': 'o-.'},
-        {'ups': Ups.WEI, 'gamma': 0.25, 'nodes': [4, 16, 32] + [256]*3,
-         'fts': [15]*5 + [1], 'fmt': 'o:'},
-        {'ups': Ups.WEI, 'gamma': 0.75, 'nodes': [4, 16, 32] + [256]*3,
-         'fts': [15]*5 + [1], 'fmt': 'o--'},
+        {'ups': Ups.NONE, 'gamma': None, 'nodes': [256]*6, 'fts': [6]*5 + [1],
+         'type_A': Type_A.NONE,  'K': 0, 'fmt': 'v--'},
+        {'ups': Ups.U_MEAN, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
+         'type_A': Type_A.WEI, 'fts': [6]*5 + [1],  'K': 0, 'fmt': 'o--'},
+        {'ups': Ups.U_LM, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
+         'type_A': Type_A.WEI, 'fts': [6]*5 + [1],  'K': 0, 'fmt': '^--'},
+        {'ups': Ups.GF, 'gamma': None, 'nodes': [4, 16, 32] + [256]*3,
+         'type_A': Type_A.WEI, 'fts': [6]*5 + [1], 'K': 3, 'fmt': 'P--'},
 
-        # {'ups': Ups.NONE, 'gamma': None, 'nodes': [256]*4, 'fts': [15]*3 + [1],
-        #  'fmt': 'v--'},
-        # {'ups': Ups.REG, 'gamma': None, 'nodes': [4] + [256]*3,
-        #  'fts': [15]*3 + [1], 'fmt': '^--'},
-        # {'ups': Ups.NO_A, 'gamma': None, 'nodes': [4] + [256]*3,
-        #  'fts': [15]*3 + [1], 'fmt': 'P--'},
-        # {'ups': Ups.BIN, 'gamma': 0.5, 'nodes': [4] + [256]*3,
-        #  'fts': [15]*3 + [1], 'fmt': 'X--'},
-        # {'ups': Ups.WEI, 'gamma': 0.5, 'nodes': [4] + [256]*3,
-        #  'fts': [15]*3 + [1], 'fmt': 'o--'}
+
+
+        # Last experiment
+        #  {'ups': Ups.NONE, 'gamma': None, 'nodes': [256]*6, 'fts': [15]*5 + [1],
+        #  'type_A': Type_A.NONE, 'fmt': 'v-'},
+        # {'ups': Ups.LI, 'gamma': None, 'nodes': [4, 16, 32] + [256]*3,
+        #  'type_A': Type_A.NONE, 'fts': [15]*5 + [1], 'fmt': '^-'},
+        # {'ups': Ups.U_MAT, 'gamma': None, 'nodes': [4, 16, 32] + [256]*3,
+        #  'type_A': Type_A.NONE, 'fts': [15]*5 + [1], 'fmt': 'P-'},
+        # {'ups': Ups.U_MEAN, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
+        #  'type_A': Type_A.BIN, 'fts': [15]*5 + [1], 'fmt': 'X-'},
+        # {'ups': Ups.U_MEAN, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
+        #  'type_A': Type_A.WEI, 'fts': [15]*5 + [1], 'fmt': 'o-'},
+
+        # {'ups': Ups.NONE, 'gamma': None, 'nodes': [256]*6, 'fts': [6]*5 + [1],
+        #  'type_A': Type_A.NONE, 'fmt': 'v--'},
+        # {'ups': Ups.LI, 'gamma': None, 'nodes': [4, 16, 32] + [256]*3,
+        #  'type_A': Type_A.NONE, 'fts': [6]*5 + [1], 'fmt': '^--'},
+        # {'ups': Ups.U_MAT, 'gamma': None, 'nodes': [4, 16, 32] + [256]*3,
+        #  'type_A': Type_A.NONE, 'fts': [6]*5 + [1], 'fmt': 'P--'},
+        # {'ups': Ups.U_MEAN, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
+        #  'type_A': Type_A.BIN, 'fts': [6]*5 + [1], 'fmt': 'X--'},
+        # {'ups': Ups.U_MEAN, 'gamma': 0.5, 'nodes': [4, 16, 32] + [256]*3,
+        #  'type_A': Type_A.WEI, 'fts': [6]*5 + [1], 'fmt': 'o--'},
+
+        # Trying gamma
+        # {'ups': Ups.WEI, 'gamma': 0, 'nodes': [4, 16, 32] + [256]*3,
+        #  'fts': [15]*5 + [1], 'fmt': 'o-.'},
+        # {'ups': Ups.WEI, 'gamma': 0.25, 'nodes': [4, 16, 32] + [256]*3,
+        #  'fts': [15]*5 + [1], 'fmt': 'o:'},
+        # {'ups': Ups.WEI, 'gamma': 0.75, 'nodes': [4, 16, 32] + [256]*3,
+        #  'fts': [15]*5 + [1], 'fmt': 'o--'},
        ]
 N_EXPS = len(EXPS)
 
@@ -64,7 +87,7 @@ def compute_clusters(G, root_clusts):
     clusters = []
     for exp in EXPS:
         cluster = MultiResGraphClustering(G, exp['nodes'], root_clusts,
-                                          up_method=exp['ups'])
+                                          type_A=exp['type_A'])
         clusters.append(cluster)
     return clusters
 
@@ -84,10 +107,9 @@ def run(id, Gs, Signals, Net, n_p):
         dec = GraphDeepDecoder(exp['fts'], clts[i].sizes, clts[i].Us,
                                As=clts[i].As, act_fn=Net['af'], ups=exp['ups'],
                                gamma=exp['gamma'], batch_norm=Net['bn'],
-                               last_act_fn=Net['laf'])
+                               last_act_fn=Net['laf'], K=exp['K'])
 
-        model = Model(dec, learning_rate=Net['lr'], decay_rate=Net['dr'],
-                      epochs=Net['epochs'])
+        model = Model(dec, learning_rate=Net['lr'], epochs=Net['epochs'])
         model.fit(x_n)
         node_err[i], err[i] = model.test(signal.x)
         params[i] = model.count_params()
@@ -99,8 +121,9 @@ def run(id, Gs, Signals, Net, n_p):
 def create_legend(params):
     legend = []
     for i, exp in enumerate(EXPS):
-        legend.append('Ups: {}, G: {}, P: {}'
-                      .format(exp['ups'].name, exp['gamma'], params[i]))
+        legend.append('Ups: {}, A: {}, G: {}, K: {}, P: {}'
+                      .format(exp['ups'].name, exp['type_A'].name,
+                              exp['gamma'], exp['K'], params[i]))
     return legend
 
 
@@ -112,7 +135,7 @@ if __name__ == '__main__':
     # Graph parameters
     Gs = {}
     Gs['type'] = ds.SBM  # SBM or ER
-    Gs['n_graphs'] = 50
+    Gs['n_graphs'] = 1
     Gs['N'] = 256
     Gs['k'] = 4
     Gs['p'] = 0.25
@@ -125,11 +148,12 @@ if __name__ == '__main__':
     # Signal parameters
     Signals = {}
     Signals['n_signals'] = 50
-    Signals['type'] = ds.SigType.DS
-    Signals['non_lin'] = ds.NonLin.MEDIAN
+    Signals['type'] = ds.SigType.DW
+    Signals['non_lin'] = ds.NonLin.SQ2
     Signals['deltas'] = Gs['k']
     Signals['L'] = 6
     Signals['noise'] = N_P
+    Signals['missing'] = 0
     Signals['to_0_1'] = False
 
     Net = {}
@@ -137,8 +161,7 @@ if __name__ == '__main__':
     Net['af'] = nn.Tanh()  # nn.CELU()
     Net['bn'] = True
     Net['lr'] = 0.005
-    Net['dr'] = 1
-    Net['epochs'] = 250
+    Net['epochs'] = 500
 
     print("CPUs used:", N_CPUS)
     start_time = time.time()
