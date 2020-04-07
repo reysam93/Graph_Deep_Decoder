@@ -53,14 +53,10 @@ class Model:
 
             x_hat = self.arch(self.arch.input)
             loss = self.loss(x_hat, x_n)
-            loss.backward()
-            self.optim.step()
-            train_err[i-1] = loss.detach().numpy()
-            t = time.time()-t_start
 
             if best_err > 1.005*loss.data:
                 best_epoch = i
-                best_mse = loss.data
+                best_err = loss.data
                 best_net = copy.deepcopy(self.arch)
 
             # Evaluate if the model is overfitting noise
@@ -68,6 +64,11 @@ class Model:
                 with no_grad():
                     eval_loss = self.loss(x_hat, x)
                     val_err[i-1] = eval_loss.detach().numpy()
+
+            loss.backward()
+            self.optim.step()
+            train_err[i-1] = loss.detach().numpy()
+            t = time.time()-t_start
 
             if self.verbose and i % self.eval_freq == 0:
                 print('Epoch {}/{}({:.4f}s)\tTrain Loss: {:.8f}\tEval: {:.8f}'
@@ -204,7 +205,7 @@ class Inpaint(Model):
 
             if best_err > 1.005*loss.data:
                 best_epoch = i
-                best_mse = loss.data
+                best_err = loss.data
                 best_net = copy.deepcopy(self.arch)
 
             # Evaluate if the model is overfitting noise

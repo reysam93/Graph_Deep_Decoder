@@ -23,13 +23,39 @@ class Ups(Enum):
 # Error messages
 ERR_DIFF_N_LAYERS = 'Length of the nodes and features vector must be the same'
 ERR_A_NON_SYM = 'Matrix A for upsampling should be symmetric'
-# ERR_WRONG_METHOD = 'Wrong combination of methods for upsampling'
+# ERR_WRONG_METHOD = 'Wrong combination of methods for upsampling' 
 ERR_WRONG_INPUT_SIZE = 'Number of input samples must be 1'
 ERR_UNK_UPS = 'Unkown upsampling type {}'
 ERR_NO_UPS = 'Upsampling is None but layers have different sizes'
 
 
-# TODO: ups should be the A_type and ups the type of upsampling op
+class GraphDecoder(nn.Module):
+    """
+    This class represent a basic graph decoder with only one layer following
+    the model G(C) = ReLU(HC)v, where instead of upsampling a fixed
+    low pass graph filter is used.
+    """
+    def __init__(self, features, H):
+        """
+        The arguments are:
+        - features: the number of features
+        - H: fixed graph filter
+        """
+        super().__init__()
+        N = H.shape[0]
+        self.input = Tensor(H).view([1, N, N])
+        self.v = torch.ones(features)/math.sqrt(features)
+        self.v[math.ceil(features/2):] *= -1
+        self.conv = nn.Conv1d(N, features, kernel_size=1,
+                              bias=False)
+        std = 1/math.sqrt(N)
+        self.conv.weight.data.normal_(0, std)
+        self.relu = torch.nn.ReLU()
+
+    def forward(self, input):
+        return self.relu(self.conv(input)).squeeze().t().mv(self.v)
+
+
 class GraphDeepDecoder(nn.Module):
     def __init__(self,
                  # Decoder args

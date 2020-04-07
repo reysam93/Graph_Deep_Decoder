@@ -106,13 +106,13 @@ class GraphSignal():
     @staticmethod
     def create(signal_type, G, non_lin,
                L=6, deltas=4, unit_norm=True, center=False,
-               to_0_1=False, D=None, pos_coefs=True):
+               to_0_1=False, D=None, coefs=None, pos_coefs=True):
         if signal_type is SigType.NOISE:
             signal = DeterministicGS(G, np.random.randn(G.N))
         elif signal_type is SigType.DS:
             signal = DiffusedSparseGS(G, non_lin, L, deltas, pos_coefs)
         elif signal_type is SigType.DW:
-            signal = DiffusedWhiteGS(G, non_lin, L, pos_coefs)
+            signal = DiffusedWhiteGS(G, non_lin, L, coefs, pos_coefs)
         elif signal_type is SigType.SM:
             signal = SmoothGS(G, non_lin)
         elif signal_type is SigType.NON_BL:
@@ -146,11 +146,13 @@ class GraphSignal():
         self.x = None
         self.x_n = None
 
-    def random_diffusing_filter(self, L, pos_coefs):
+    def diffusing_filter(self, L, coefs, pos_coefs):
         """
         Create a lineal random diffusing filter with L random coefficients
         """
-        if pos_coefs:
+        if coefs is not None:
+            hs = coefs
+        elif pos_coefs:
             hs = np.random.rand(L)  # Uniform [0, 1]
         else:
             hs = np.random.rand(L)*2 - 1  # Uniform [-1, 1]
@@ -242,11 +244,11 @@ class DeterministicGS(GraphSignal):
 
 class DiffusedSparseGS(GraphSignal):
     def __init__(self, G, non_lin, L, n_deltas,
-                 pos_coefs=True, min_d=-1, max_d=1):
+                 coefs=None, pos_coefs=True, min_d=-1, max_d=1):
         GraphSignal.__init__(self, G)
         self.n_deltas = n_deltas
         self.random_sparse_s(min_d, max_d)
-        self.random_diffusing_filter(L, pos_coefs)
+        self.diffusing_filter(L, coefs, pos_coefs)
         self.x = np.asarray(self.H.dot(self.s))
         self.apply_non_linearity(non_lin)
 
@@ -286,10 +288,10 @@ class DiffusedSparseGS(GraphSignal):
 
 
 class DiffusedWhiteGS(GraphSignal):
-    def __init__(self, G, non_lin, L, pos_coefs=True):
+    def __init__(self, G, non_lin, L, coefs=None, pos_coefs=True):
         GraphSignal.__init__(self, G)
         self.s = np.random.randn(G.N)
-        self.random_diffusing_filter(L, pos_coefs)
+        self.diffusing_filter(L, coefs, pos_coefs)
         self.x = np.asarray(self.H.dot(self.s))
         self.apply_non_linearity(non_lin)
 
