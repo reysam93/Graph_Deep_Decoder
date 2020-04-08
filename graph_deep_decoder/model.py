@@ -12,7 +12,7 @@ ADAM = 0
 
 class Model:
     def __init__(self, arch,
-                 learning_rate=0.001, loss_func=nn.MSELoss(),
+                 learning_rate=0.001, loss_func=nn.MSELoss(reduction='none'),
                  epochs=1000, eval_freq=100, verbose=False,
                  opt=ADAM):
         assert opt in [SGD, ADAM], 'Unknown optimizer type'
@@ -37,7 +37,7 @@ class Model:
                 filter_coefs.append(layer.hs.detach().numpy())
         return np.array(filter_coefs)
 
-    def fit(self, signal, x=None):
+    def fit(self, signal, x=None, reduce_err=True):
         if x is not None:
             x = Tensor(x).view([1, 1, x.size])
         x_n = Tensor(Tensor(signal)).view([1, 1, signal.size])
@@ -45,29 +45,32 @@ class Model:
         best_err = 1000000
         best_net = None
         best_epoch = 0
-        train_err = np.zeros(self.epochs)
-        val_err = np.zeros(self.epochs)
+        train_err = np.zeros((self.epochs, signal.size))
+        val_err = np.zeros((self.epochs, signal.size))
+        # train_err = np.zeros(self.epochs)
+        # val_err = np.zeros(self.epochs)
         for i in range(1, self.epochs+1):
             t_start = time.time()
             self.arch.zero_grad()
 
             x_hat = self.arch(self.arch.input)
             loss = self.loss(x_hat, x_n)
+            loss_red = loss.mean()
 
-            if best_err > 1.005*loss.data:
+            if best_err > 1.005*loss_red:
                 best_epoch = i
-                best_err = loss.data
+                best_err = loss_red
                 best_net = copy.deepcopy(self.arch)
 
             # Evaluate if the model is overfitting noise
             if x is not None:
                 with no_grad():
                     eval_loss = self.loss(x_hat, x)
-                    val_err[i-1] = eval_loss.detach().numpy()
+                    val_err[i-1, :] = eval_loss.detach().numpy()
 
-            loss.backward()
+            loss_red.backward()
             self.optim.step()
-            train_err[i-1] = loss.detach().numpy()
+            train_err[i-1, :] = loss.detach().numpy()
             t = time.time()-t_start
 
             if self.verbose and i % self.eval_freq == 0:
@@ -75,14 +78,17 @@ class Model:
                       .format(i, self.epochs, t, train_err[i-1], val_err[i-1]))
 
         self.arch = best_net
+        if reduce_err:
+            train_err = np.mean(train_err, axis=1)
+            val_err = np.mean(val_err, axis=1)
         return train_err, val_err, best_epoch
 
     def test(self, x):
         x_hat = self.arch(self.arch.input).squeeze()
         node_err = self.loss(x_hat, Tensor(x)).detach().numpy()
         x_hat = x_hat.detach().numpy()
-        err = np.sum((x_hat-x)**2)/np.linalg.norm(x)**2
-        return node_err, err
+        err = np.sum(node_err)/np.linalg.norm(x)**2
+        return np.median(node_err), err
 
 
 class BLModel:
@@ -182,6 +188,8 @@ class Inpaint(Model):
                        eval_freq=eval_freq, verbose=verbose, opt=opt)
         self.mask = Tensor(mask)
 
+    # NOTE: To many code repeated! --> Change to common funct and only
+    # implement the call to loss?
     def fit(self, signal, x=None):
         if x is not None:
             x = Tensor(x).view([1, 1, x.size])
