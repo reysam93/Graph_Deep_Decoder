@@ -1,2 +1,4 @@
 *.pyc
 2Layer_Decoder_Exps/*.py
+2Layer_Decoder_Exps/.ipynb_checkpoints
+.ipynb_checkpoints
