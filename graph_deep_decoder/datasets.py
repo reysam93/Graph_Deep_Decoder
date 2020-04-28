@@ -101,6 +101,35 @@ def create_graph(ps, seed=None):
     return G
 
 
+def bandlimited_signal(Lambda, V, p=5, first_p=True, energy=1):
+    if p >= 1 and type(p) is int:
+        nparams = p
+    elif 0 < p and 1 > p:
+        nparams = int(p*V.shape[0])
+    else:
+        return None
+
+    xp = np.random.randn(nparams)
+    xp /= np.linalg.norm(xp)
+    idx = np.flip(np.argsort(np.abs(Lambda)), axis=0)
+
+    if first_p:
+        idx = idx[:nparams]
+    else:
+        idx = idx[-nparams:]
+
+    x = V[:, idx].dot(xp)
+
+    if energy == 1:
+        return x
+    elif energy >= 0 and energy < 1:
+        noise = np.random.randn(V.shape[0])
+        noise /= np.linalg.norm(noise)
+        return energy*x + (1-energy)*noise
+    else:
+        return None
+
+
 class GraphSignal():
     # TODO: add nonlinearity option!
     @staticmethod

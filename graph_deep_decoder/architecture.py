@@ -23,7 +23,6 @@ class Ups(Enum):
 # Error messages
 ERR_DIFF_N_LAYERS = 'Length of the nodes and features vector must be the same'
 ERR_A_NON_SYM = 'Matrix A for upsampling should be symmetric'
-# ERR_WRONG_METHOD = 'Wrong combination of methods for upsampling' 
 ERR_WRONG_INPUT_SIZE = 'Number of input samples must be 1'
 ERR_UNK_UPS = 'Unkown upsampling type {}'
 ERR_NO_UPS = 'Upsampling is None but layers have different sizes'
@@ -35,11 +34,12 @@ class GraphDecoder(nn.Module):
     the model G(C) = ReLU(HC)v, where instead of upsampling a fixed
     low pass graph filter is used.
     """
-    def __init__(self, features, H):
+    def __init__(self, features, H, scale_std=0.01):
         """
         The arguments are:
         - features: the number of features
         - H: fixed graph filter
+        - scale_std: scale the std of the learnable weights initialization
         """
         super().__init__()
         N = H.shape[0]
@@ -48,12 +48,41 @@ class GraphDecoder(nn.Module):
         self.v[math.ceil(features/2):] *= -1
         self.conv = nn.Conv1d(N, features, kernel_size=1,
                               bias=False)
-        std = 1/math.sqrt(N)
+        std = scale_std/math.sqrt(N)
         self.conv.weight.data.normal_(0, std)
         self.relu = torch.nn.ReLU()
 
     def forward(self, input):
         return self.relu(self.conv(input)).squeeze().t().mv(self.v)
+
+    def analytical_squared_jacobian(self):
+        """
+        Return its squared Jacobian computed analitically
+        """
+        U = self.input.numpy().squeeze()
+        C = self.conv.weight.data.numpy().squeeze().T
+        diag_v = np.diag(self.v.numpy().squeeze())
+        return (U.dot(C) > 0).dot(diag_v**2).dot((U.dot(C) > 0).T)*(U.dot(U.T))
+
+    def autograd_squared_jacobian(self):
+        """
+        Return its squared Jacobian computed using autograd
+        """
+        dec_copy = copy.deepcopy(self)
+        y = dec_copy(dec_copy.input)
+        outs = torch.eye(y.shape[0])
+
+        jac = []
+        for out in outs:
+            y = dec_copy(dec_copy.input)
+            y.backward(out[:])
+            allgrads = []
+            for p in dec_copy.parameters():
+                gra = p.grad.data.numpy().flatten()
+                allgrads += [gra]
+            jac += [allgrads]
+        Jac = np.array(jac).squeeze()
+        return Jac.dot(Jac.T)
 
 
 class GraphDeepDecoder(nn.Module):

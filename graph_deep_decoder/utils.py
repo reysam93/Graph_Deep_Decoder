@@ -12,7 +12,7 @@ from scipy.io import loadmat
 from sklearn.cluster import AgglomerativeClustering
 
 from graph_deep_decoder import datasets as ds
-
+from graph_deep_decoder.architecture import GraphDecoder
 
 def plot_overfitting(err, err_val, fmts, legend, show=True):
     rc('text', usetex=True)
@@ -179,5 +179,22 @@ def read_graphs(dataset_path, attr, min_size=50, max_signals=100,
     return Gs, signals
 
 
-def plot_recov_signals(G, x, x_n, x_est):
-    pass
+def ordered_eig(M):
+    """
+    Ensure the eigendecomposition of M is ordered
+    """
+    eig_val, eig_vec = np.linalg.eig(M)
+    idx = np.flip(np.argsort(eig_val), axis=0)
+    eig_val = eig_val[idx]
+    eig_vec = eig_vec[:, idx]
+    return eig_val, eig_vec
+
+
+def choose_eig_sign(EigA, EigB):
+    """
+    Ensure that most of the signs between eigA and eigB are the same
+    by multiplying eigA by -1 if needed.
+    """
+    diff_signs = np.sum(np.sign(EigA) != np.sign(EigB), axis=0)
+    mask = np.where(diff_signs > EigA.shape[0]/2, -1, 1)
+    return mask*EigA
