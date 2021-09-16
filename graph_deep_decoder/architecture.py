@@ -75,14 +75,19 @@ class GraphDecoder(nn.Module):
         jac = []
         for out in outs:
             y = dec_copy(dec_copy.input)
+            dec_copy.zero_grad()
             y.backward(out[:])
-            allgrads = []
+            allgrads = np.zeros(0)
             for p in dec_copy.parameters():
                 gra = p.grad.data.numpy().flatten()
-                allgrads += [gra]
+                allgrads = np.append(allgrads, gra)
             jac += [allgrads]
         Jac = np.array(jac).squeeze()
         return Jac.dot(Jac.T)
+
+    def count_params(self):
+        return sum(p.numel() for p in self.model.parameters()
+                   if p.requires_grad)
 
 
 class GraphDeepDecoder(nn.Module):
@@ -92,9 +97,10 @@ class GraphDeepDecoder(nn.Module):
                  # Ups args
                  As=None,  ups=Ups.U_MEAN,
                  gamma=0.5, K=2,
-                 batch_norm=True,
+                 batch_norm=False,
                  # Activation functions
-                 act_fn=nn.Tanh(), last_act_fn=nn.Tanh()):
+                 act_fn=nn.Tanh(), last_act_fn=nn.Tanh(),
+                 input_std=0.01, w_std=0.01):
         assert len(features) == len(nodes), ERR_DIFF_N_LAYERS
         assert isinstance(ups, Ups) or ups is None, \
             ERR_UNK_UPS.format(ups)
@@ -112,13 +118,15 @@ class GraphDeepDecoder(nn.Module):
         self.batch_norm = batch_norm
         self.act_fn = act_fn
         self.last_act_fn = last_act_fn
+        self.w_std = w_std/np.sqrt(features)
         self.build_network()
 
         if self.ups_type is None or self.ups_type is Ups.NONE:
             shape = [1, self.fts[0], self.nodes[-1]]
         else:
             shape = [1, self.fts[0], self.nodes[0]]
-        self.input = Tensor(torch.zeros(shape)).data.normal_()
+        std = input_std/np.sqrt(shape[2])
+        self.input = Tensor(torch.zeros(shape)).data.normal_(0, std)
 
     def add_layer(self, module):
         self.model.add_module(str(len(self.model) + 1), module)
@@ -126,33 +134,33 @@ class GraphDeepDecoder(nn.Module):
     def build_network(self):
         ups_skip = 0
         for l in range(len(self.fts)-1):
-            self.add_layer(nn.Conv1d(self.fts[l], self.fts[l+1],
-                           self.kernel_size, bias=False))
+            conv = nn.Conv1d(self.fts[l], self.fts[l+1], self.kernel_size,
+                             bias=False)
+            conv.weight.data.normal_(0, self.w_std[l])
+            self.add_layer(conv)
 
             # Check if there is upsampling in layer l
-            if self.nodes[l] < self.nodes[l+1]:
-                A = self.As[l+1-ups_skip] if self.As else None
+            if self.Us[l] is not None:
+                A = self.As[l] if self.As else None
 
                 if self.ups_type is Ups.LI:
                     ups = Interpolate(self.nodes[l], self.nodes[l+1])
                 elif self.ups_type is Ups.U_MAT:
-                    ups = Upsampling(self.Us[l-ups_skip])
+                    ups = Upsampling(self.Us[l])
                 elif self.ups_type is Ups.U_MEAN:
-                    ups = MeanUps(self.Us[l-ups_skip], A,
+                    ups = MeanUps(self.Us[l], A,
                                   self.gamma)
                 elif self.ups_type is Ups.U_LM:
-                    ups = LearnMeanUps(self.Us[l-ups_skip], A,
+                    ups = LearnMeanUps(self.Us[l], A,
                                        self.gamma)
                 elif self.ups_type is Ups.GF:
-                    ups = GFUps(self.Us[l-ups_skip], A, self.K)
+                    ups = GFUps(self.Us[l], A, self.K)
                 elif self.ups_type is Ups.NVGF:
-                    ups = NVGFUps(self.Us[l-ups_skip], A, self.K)
+                    ups = NVGFUps(self.Us[l], A, self.K)
                 else:
                     raise RuntimeError('Unknown upsampling type')
 
                 self.add_layer(ups)
-            else:
-                ups_skip += 1
 
             if l < (len(self.fts)-2):
                 # Not the last layer
@@ -167,11 +175,49 @@ class GraphDeepDecoder(nn.Module):
         return self.model
 
     def forward(self, x):
-            return self.model(x)
+        return self.model(x).squeeze()
 
     def count_params(self):
         return sum(p.numel() for p in self.model.parameters()
                    if p.requires_grad)
+
+    def autograd_squared_jacobian(self):
+        """
+        Return its squared Jacobian computed using autograd
+        """
+        dec_copy = copy.deepcopy(self)
+        y = dec_copy(dec_copy.input)
+        outs = torch.eye(y.shape[0])
+
+        jac = []
+        for out in outs:
+            y = dec_copy(dec_copy.input)
+            dec_copy.zero_grad()
+
+            y.backward(out[:])
+            allgrads = np.zeros(0)
+            for p in dec_copy.parameters():
+                gra = p.grad.data.numpy().flatten()
+                allgrads = np.append(allgrads, gra)
+            jac += [np.array(allgrads)]
+
+        Jac = np.array(jac).squeeze()
+        return Jac.dot(Jac.T)
+
+    def Us_norms(self):
+        norms = []
+        for i, layer in enumerate(self.model):
+            if not isinstance(layer, Upsampling):
+                continue
+            norm = {'layer': i, 'norm': np.linalg.norm(layer.U_T)}
+            norms.append(norm)
+        return norms
+
+    def Us_to_unit_norm(self):
+        for i, layer in enumerate(self.model):
+            if not isinstance(layer, Upsampling):
+                continue
+            layer.U_T /= np.linalg.norm(layer.U_T)
 
 
 class Upsampling(nn.Module):
@@ -184,9 +230,11 @@ class Upsampling(nn.Module):
 
     def forward(self, input):
         assert input.shape[0] == 1, ERR_WRONG_INPUT_SIZE
-        n_channels = input.shape[1]
-        output = input[0, :, :].mm(self.U_T)
-        return output.view([1, n_channels, self.child_size])
+        # n_channels = input.shape[1]
+        # output = input[0, :, :].mm(self.U_T)
+        # return output.view([1, n_channels, self.child_size])
+
+        return input.matmul(self.U_T)
 
 
 # NOTE: Previous Ups.REG
@@ -209,7 +257,12 @@ class MeanUps(Upsampling):
         assert np.allclose(A, A.T), ERR_A_NON_SYM
         Upsampling.__init__(self, U)
         # NOTE: Not clear if it is better to normalize A!!
-        self.A = np.linalg.inv(np.diag(np.sum(A, 0))).dot(A)
+        if np.linalg.matrix_rank(np.diag(np.sum(A, 0))) != A.shape[0]:
+            self.A = np.linalg.pinv(np.diag(np.sum(A, 0))).dot(A)
+            print('WARNING: degree matrix is singular')
+        else:
+            self.A = np.linalg.inv(np.diag(np.sum(A, 0))).dot(A)
+
         # self.A = A
         self.A = gamma*np.eye(A.shape[0]) + (1-gamma)*self.A
         self.A = Tensor(self.A)
@@ -278,3 +331,45 @@ class NVGFUps(Upsampling):
         H = (self.hs.view([self.K, self.child_size, 1])*self.Apows).sum(0)
         output = input[0, :, :].mm(self.U_T.mm(H.t()))
         return output.view([1, n_channels, self.child_size])
+
+
+class GCNN(nn.Module):
+    def __init__(self, features, nodes, S,
+                 input_std=0.01, w_std=0.01):
+        assert len(features) == len(nodes), ERR_DIFF_N_LAYERS
+
+        super(GCNN, self).__init__()
+        self.model = nn.Sequential()
+        self.fts = features
+        self.nodes = nodes
+        self.S = S
+        self.kernel_size = 1
+        self.w_std = w_std/np.sqrt(features)
+        self.build_network()
+
+        shape = [1, self.fts[0], self.nodes[-1]]
+        std = input_std/np.sqrt(shape[2])
+        self.input = Tensor(torch.zeros(shape)).data.normal_(0, std)
+
+    def add_layer(self, module):
+        self.model.add_module(str(len(self.model) + 1), module)
+
+    def build_network(self):
+        ups_skip = 0
+        for l in range(len(self.fts)-1):
+            conv = nn.Conv1d(self.fts[l], self.fts[l+1], self.kernel_size,
+                             bias=False)
+            conv.weight.data.normal_(0, self.w_std[l])
+            self.add_layer(conv)
+            self.add_layer(Upsampling(self.S))
+
+            if l < (len(self.fts)-2):
+                self.add_layer(nn.ReLU())
+        return self.model
+
+    def forward(self, x):
+        return self.model(x).squeeze()
+
+    def count_params(self):
+        return sum(p.numel() for p in self.model.parameters()
+                   if p.requires_grad)

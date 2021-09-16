@@ -2,9 +2,12 @@ from enum import Enum
 
 import matplotlib.pyplot as plt
 import numpy as np
+import networkx as nx
 from pygsp.graphs import (BarabasiAlbert, ErdosRenyi, Graph,
                           StochasticBlockModel)
 from scipy.sparse.csgraph import dijkstra
+
+from graph_deep_decoder import utils
 
 
 # Signals Type Constants
@@ -26,11 +29,15 @@ class NonLin(Enum):
 
 
 # Graph Type Constants
-SBM = 1
-ER = 2
-BA = 3
+SBM = 1     # Stochastic Block Model
+ER = 2      # Erdos Renyi
+BA = 3      # Barabasi Albert
+SW = 4      # Small World
+REG = 5     # Regular Graph
+PLC = 6     # Power Law Cluster
+CAVE = 7    # Caveman graph
 
-MAX_RETRIES = 20
+MAX_RETRIES = 25
 
 # Comm Node Assignment Constants
 CONT = 1    # Contiguous nodes
@@ -57,6 +64,7 @@ def assign_nodes_to_comms(N, k):
     return z
 
 
+# TODO: migrate to networkx library
 def create_graph(ps, seed=None):
     """
     Create a random graph using the parameters specified in the dictionary ps.
@@ -91,13 +99,38 @@ def create_graph(ps, seed=None):
         G = BarabasiAlbert(N=ps['N'], m=ps['m'], m0=ps['m0'], seed=seed)
         G.info = {'comm_sizes': np.array([ps['N']]),
                   'node_com': np.zeros((ps['N'],), dtype=int)}
+    elif ps['type'] == SW:
+        # ps['k'] < 1 means the proportion of desired links is indicated
+        k = ps['k']*(ps['N']-1) if ps['k'] < 1 else ps['k']
+        G = nx.connected_watts_strogatz_graph(n=ps['N'], k=int(k), p=ps['p'],
+                                              tries=MAX_RETRIES, seed=seed)
+        A = nx.to_numpy_array(G)
+        G = Graph(A)
+    elif ps['type'] == REG:
+        # ps['d'] < 1 means the proportion of desired links is indicated
+        d = ps['d']*(ps['N']-1) if ps['d'] < 1 else ps['d']
+        G = nx.random_regular_graph(n=ps['N'], d=int(d), seed=seed)
+        A = nx.to_numpy_array(G)
+        G = Graph(A)
+    elif ps['type'] == PLC:
+        # ps['m'] < 1 means the proportion of desired links is indicated
+        m = ps['m']*(ps['N']-1) if ps['m'] < 1 else ps['m']
+        G = nx.powerlaw_cluster_graph(n=ps['N'], m=int(m), p=ps['p'],
+                                      seed=seed)
+        A = nx.to_numpy_array(G)
+        G = Graph(A)
+    elif ps['type'] == CAVE:
+        k = int(ps['N']/ps['l'])
+        G = nx.connected_caveman_graph(ps['l'], k=k)
+        A = nx.to_numpy_array(G)
+        G = Graph(A)
     else:
         raise RuntimeError('Unknown graph type')
 
     assert G.is_connected(), 'Graph is not connected'
 
     G.set_coordinates('spring')
-    G.compute_fourier_basis()
+    # G.compute_fourier_basis()
     return G
 
 
@@ -167,7 +200,7 @@ class GraphSignal():
     @staticmethod
     def generate_inpaint_mask(x, p_miss):
         mask = np.ones(x.size)
-        mask[np.random.choice(x.size, int(x.size*p_miss))] = 0
+        mask[np.random.choice(x.size, int(x.size*p_miss), replace=False)] = 0
         return mask
 
     def __init__(self, G):
@@ -252,6 +285,20 @@ class GraphSignal():
         n_coefs = int(self.G.N*coefs)
         x_freq = self.G.U.T.dot(self.x)
         return np.sum(np.sort(-np.abs(x_freq))[:n_coefs]**2)/np.sum(x_freq**2)
+
+    def check_bl_err(self, coefs=0.1, firsts=True):
+        k = int(self.G.N*coefs)
+        Lambda, V = utils.ordered_eig(self.G.W.todense())
+        V = np.asarray(V)
+        x = np.asarray(self.x)
+        if firsts:
+            x_bl = V[:, :k].dot(V[:, :k].T.dot(x))
+        else:
+            x_freq = V.T.dot(x)
+            idx = np.flip(np.abs(x_freq).argsort(), axis=0)[:k]
+            x_bl = V[:, idx].dot(x_freq[idx])
+
+        return np.linalg.norm(x-x_bl)**2
 
     def plot_freq_resp(self, show=True):
         """

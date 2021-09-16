@@ -19,6 +19,7 @@ ERR_DIFF_SIZE = "Last number of clusters ({}) must match graph size ({})"
 ERR_UNK_UPS = 'Unkown type of A: {}'
 
 
+# TODO: use only matrix U!!
 class MultiResGraphClustering():
     """
     This class computes a bottom-up multiresolution hierarchichal clustering
@@ -54,7 +55,6 @@ class MultiResGraphClustering():
         non_rep_sizes = list(dict.fromkeys(n_clusts))
         if len(non_rep_sizes) == 1:
             self.sizes = n_clusts
-            # print("WARNING: there will be no upsampling. Skipping clustering")
             return
 
         self.compute_clusters(n_clusts, method)
@@ -87,6 +87,8 @@ class MultiResGraphClustering():
         for i, t in enumerate(n_clusts):
             if i > 0 and t == n_clusts[i-1]:
                 self.sizes.append(t)
+                # NUEVO --> igual borrar!
+                self.labels.append(self.labels[-1])
                 continue
             if t == self.G.N:
                 self.labels.append(np.arange(1, self.G.N+1))
@@ -110,11 +112,13 @@ class MultiResGraphClustering():
     # TODO: check if this is really needed!
     def compute_hierarchy_descendance(self):
         # Compute descendance only when there is a change of size
-        sizes = list(dict.fromkeys(self.sizes))
-        for i in range(len(sizes)-1):
+        for i in range(len(self.sizes)-1):
             self.descendances.append([])
+            if self.sizes[i] == self.sizes[i+1]:
+                continue
+
             # Find parent (labels i) of each child cluster (labels i+1)
-            for j in range(sizes[i+1]):
+            for j in range(self.sizes[i+1]):
                 indexes = np.where(self.labels[i+1] == j+1)
                 # Check if all has the same value!!!
                 n_parents = np.unique(self.labels[i+1][indexes]).size
@@ -124,19 +128,20 @@ class MultiResGraphClustering():
 
                 parent_id = self.labels[i][indexes][0]
                 self.descendances[i].append(parent_id)
-
         return self.descendances
 
     def compute_Ups(self):
         """
         Compute upsampling matrices Us
         """
-        sizes = list(dict.fromkeys(self.sizes))
         self.compute_hierarchy_descendance()
         for i in range(len(self.descendances)):
+            if not self.descendances[i]:
+                self.Us.append(None)
+                continue
             descendance = np.asarray(self.descendances[i])
-            U = np.zeros((sizes[i+1], sizes[i]))
-            for j in range(sizes[i+1]):
+            U = np.zeros((self.sizes[i+1], self.sizes[i]))
+            for j in range(self.sizes[i+1]):
                 U[j, descendance[j]-1] = 1
             self.Us.append(U)
 
@@ -146,9 +151,11 @@ class MultiResGraphClustering():
             return
 
         A = self.G.W.todense()
-        sizes = list(dict.fromkeys(self.sizes))
-        for i in range(len(sizes)):
-            N = sizes[i]
+        for i in range(1, len(self.sizes)):
+            if self.sizes[i] == self.sizes[i-1]:
+                self.As.append(None)
+                continue
+            N = self.sizes[i]
             self.As.append(np.zeros((N, N)))
 
             inter_clust_links = 0
@@ -159,13 +166,13 @@ class MultiResGraphClustering():
                     sub_A = A[nodes_c1, :][:, nodes_c2]
 
                     if A_type == Type_A.BIN and np.sum(sub_A) > 0:
-                        self.As[i][j, k] = self.As[i][k, j] = 1
+                        self.As[i-1][j, k] = self.As[i-1][k, j] = 1
                     if A_type == Type_A.WEI:
-                        self.As[i][j, k] = np.sum(sub_A)
-                        self.As[i][k, j] = self.As[i][j, k]
+                        self.As[i-1][j, k] = np.sum(sub_A)
+                        self.As[i-1][k, j] = self.As[i-1][j, k]
                         inter_clust_links += np.sum(sub_A)
             if A_type == Type_A.WEI:
-                self.As[i] = self.As[i]/inter_clust_links
+                self.As[i-1] = self.As[i-1]/inter_clust_links
         return self.As
 
     def plot_labels(self, show=True):

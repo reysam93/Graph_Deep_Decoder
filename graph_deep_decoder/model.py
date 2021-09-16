@@ -39,21 +39,20 @@ class Model:
 
     def fit(self, signal, x=None, reduce_err=True):
         if x is not None:
-            x = Tensor(x).view([1, 1, x.size])
-        x_n = Tensor(Tensor(signal)).view([1, 1, signal.size])
+            x = Tensor(x)
+        x_n = Tensor(Tensor(signal))
 
         best_err = 1000000
         best_net = None
         best_epoch = 0
         train_err = np.zeros((self.epochs, signal.size))
         val_err = np.zeros((self.epochs, signal.size))
-        # train_err = np.zeros(self.epochs)
-        # val_err = np.zeros(self.epochs)
         for i in range(1, self.epochs+1):
             t_start = time.time()
             self.arch.zero_grad()
 
             x_hat = self.arch(self.arch.input)
+
             loss = self.loss(x_hat, x_n)
             loss_red = loss.mean()
 
@@ -74,13 +73,15 @@ class Model:
             t = time.time()-t_start
 
             if self.verbose and i % self.eval_freq == 0:
+                err_val_i = np.sum(val_err[i-1, :])
+                err_train_i = np.sum(train_err[i-1, :])
                 print('Epoch {}/{}({:.4f}s)\tTrain Loss: {:.8f}\tEval: {:.8f}'
-                      .format(i, self.epochs, t, train_err[i-1], val_err[i-1]))
+                      .format(i, self.epochs, t,  err_train_i, err_val_i))
 
         self.arch = best_net
         if reduce_err:
-            train_err = np.mean(train_err, axis=1)
-            val_err = np.mean(val_err, axis=1)
+            train_err = np.sum(train_err, axis=1)
+            val_err = np.sum(val_err, axis=1)
         return train_err, val_err, best_epoch
 
     def test(self, x):
@@ -92,25 +93,20 @@ class Model:
 
 
 class BLModel:
-    def __init__(self, V, coefs, max_coefs=True):
+    def __init__(self, V, coefs):
         self.V = V
-        self.coefs = min(coefs, V.shape[0])
-        self.max_coefs = max_coefs
+        self.k = min(coefs, V.shape[0])
         self.x_k = None
 
     def count_params(self):
         return self.coefs
 
     def fit(self, signal):
-        x_f = self.V.T.dot(signal)
-        if self.max_coefs:
-            max_indexes = np.argsort(-np.abs(x_f))[:self.coefs]
-            self.x_k = self.V[:, max_indexes].dot(x_f[max_indexes])
-        else:
-            self.x_k = self.V[:, 0:self.coefs].dot(x_f[0:self.coefs])
+        self.x_hat = self.V[:, :self.k].dot(self.V[:, :self.k].T.dot(signal))
 
     def test(self, x):
-        err = np.sum((self.x_k-x)**2)/np.linalg.norm(x)**2
+        err = np.linalg.norm(x-self.x_hat)**2
+        err /= np.linalg.norm(x)**2
         node_err = err/x.size
         return node_err, err
 
@@ -145,10 +141,10 @@ class TVModel:
         Eye = np.eye(signal.size)
         A_hat = Eye - self.A
         H_A = np.linalg.inv(Eye+self.alpha*A_hat.T.dot(A_hat))
-        self.x_tv = H_A.dot(signal)
+        self.x_hat = np.asarray(H_A.dot(signal))
 
     def test(self, x):
-        err = np.sum((self.x_tv-x)**2)
+        err = np.sum((self.x_hat-x)**2)
         err /= np.linalg.norm(x)**2
         node_err = err/x.size
         return node_err, err
@@ -166,10 +162,33 @@ class LRModel:
     def fit(self, signal):
         assert np.isreal(signal).all(), 'Only real signals supported'
         Eye = np.eye(signal.size)
-        self.x_lr = np.linalg.inv(Eye+self.alpha*self.L).dot(signal)
+        self.x_hat = np.linalg.inv(Eye+self.alpha*self.L).dot(signal)
+        self.x_hat = np.asarray(self.x_hat)
 
     def test(self, x):
-        err = np.sum((self.x_lr-x)**2)
+        err = np.sum((self.x_hat-x)**2)
+        err /= np.linalg.norm(x)**2
+        node_err = err/x.size
+        return node_err, err
+
+    def count_params(self):
+        return 0
+
+
+# median filter
+class MedianModel:
+    def __init__(self, A):
+        self.A = A + np.eye(A.shape[0])
+
+    def fit(self, x):
+        self.x_hat = np.zeros(x.shape)
+        for i in range(self.A.shape[0]):
+            neighbours_ind = np.asarray(self.A[i, :] != 0).nonzero()
+            neighbours = x[neighbours_ind]
+            self.x_hat[i] = np.median(neighbours)
+
+    def test(self, x):
+        err = np.sum((self.x_hat-x)**2)
         err /= np.linalg.norm(x)**2
         node_err = err/x.size
         return node_err, err

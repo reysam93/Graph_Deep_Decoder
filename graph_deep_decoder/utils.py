@@ -14,18 +14,15 @@ from sklearn.cluster import AgglomerativeClustering
 from graph_deep_decoder import datasets as ds
 from graph_deep_decoder.architecture import GraphDecoder
 
-def plot_overfitting(err, err_val, fmts, legend, show=True):
-    rc('text', usetex=True)
+
+def plot_overfitting(err, fmts, legend, show=True):
     fig, ax = plt.subplots()
     # ax.semilogy(err, label='Train Err')
     # ax.semilogy(err_val, label='Val Err')
     # ax.legend()
 
     for i in range(err.shape[1]):
-        label_train = 'Train: $||x_n-x_{est}||$ '
-        label_val = 'Val: $||x_0-x_{est}||$ '
-        ax.semilogy(err[:, i], fmts[i]+'-', label=label_train + legend[i])
-        ax.semilogy(err_val[:, i], fmts[i]+'--', label=label_val + legend[i])
+        ax.semilogy(err[:, i], fmts[i]+'-', label=legend[i])
 
     ax.legend()
     plt.grid(True, which='both')
@@ -137,7 +134,8 @@ def print_from_file(file):
 
 
 def read_graphs(dataset_path, attr, min_size=50, max_signals=100,
-                to_0_1=False, center=False, max_size=None, max_smooth=None):
+                to_0_1=False, center=False, max_size=None, max_smooth=None,
+                max_bl_err=None):
     signals = []
     Gs = []
     g_sizes = []
@@ -147,6 +145,7 @@ def read_graphs(dataset_path, attr, min_size=50, max_signals=100,
         if len(signals) >= max_signals:
             break
         G = Graph(A[0])
+        G.compute_fourier_basis()
         if G.N < min_size or not G.is_connected():
             continue
         if max_size and G.N > max_size:
@@ -169,6 +168,9 @@ def read_graphs(dataset_path, attr, min_size=50, max_signals=100,
         if max_smooth and signal.smoothness() > max_smooth:
             continue
 
+        if max_bl_err and signal.check_bl_err(coefs=0.25, firsts=True) > max_bl_err:
+            continue
+
         G.compute_fourier_basis()
         G.set_coordinates('spring')
         Gs.append(G)
@@ -184,9 +186,9 @@ def ordered_eig(M):
     Ensure the eigendecomposition of M is ordered
     """
     eig_val, eig_vec = np.linalg.eig(M)
-    idx = np.flip(np.argsort(eig_val), axis=0)
-    eig_val = eig_val[idx]
-    eig_vec = eig_vec[:, idx]
+    idx = np.flip(np.argsort(np.abs(eig_val)), axis=0)
+    eig_val = np.real(eig_val[idx])
+    eig_vec = np.real(eig_vec[:, idx])
     return eig_val, eig_vec
 
 
@@ -198,3 +200,45 @@ def choose_eig_sign(EigA, EigB):
     diff_signs = np.sum(np.sign(EigA) != np.sign(EigB), axis=0)
     mask = np.where(diff_signs > EigA.shape[0]/2, -1, 1)
     return mask*EigA
+
+
+# def create_filter(G, ps, x=None):
+#     S = np.asarray(G.W.todense())
+#     if ps['S'] is 'A_norm':
+#         eigenvalues, _ = np.linalg.eig(S)
+#         S = S/np.max(np.abs(eigenvalues))
+#     elif ps['S'] is 'A_D_norm':
+#         D_inv_sqrt = np.diag(1/np.sqrt(np.sum(S, axis=0)))
+#         S = D_inv_sqrt.dot(S.dot(D_inv_sqrt))
+def create_filter(S, ps, x=None):
+    if ps['type'] is 'BLH':
+        _, V = ordered_eig(S)
+        V = np.real(V)
+        eigvalues = np.ones(V.shape[0])*0.001
+        bl_k = int(S.shape[0]*ps['k'])
+        if ps['firsts']:
+            eigvalues[:bl_k] = 1
+        else:
+            x_freq = V.T.dot(x)
+            idx = np.flip(np.abs(x_freq).argsort(), axis=0)[:bl_k]
+            eigvalues[idx] = 1
+
+        H = V.dot(np.diag(eigvalues).dot(V.T))
+    elif ps['type'] is 'RandH':
+        hs = np.random.rand(ps['K'])
+        hs /= np.sum(hs)
+    elif ps['type'] is 'FixedH':
+        hs = ps['hs']
+    else:
+        print('Unkwown filter type')
+        return None
+
+    if ps['type'] is not 'BLH':
+        H = np.zeros((S.shape))
+        for l, h in enumerate(hs):
+            H += h*np.linalg.matrix_power(S, l)
+
+    if ps['H_norm']:
+        H /= np.linalg.norm(H)
+
+    return H
