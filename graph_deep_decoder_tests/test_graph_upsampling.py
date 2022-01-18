@@ -41,16 +41,16 @@ class GraphClustSizesTest(unittest.TestCase):
 
     def test_repeated_sizes(self):
         nodes = [4, 4, 16, 32, 32, 64, 256, 256, 256]
-        no_rep_nodes = set(nodes)
         cluster = gc.MultiResGraphClustering(self.G, nodes, k=4)
         self.assertEqual(len(nodes), len(cluster.sizes))
-        self.assertEqual(len(no_rep_nodes)-1, len(cluster.Us))
+        self.assertEqual(len(nodes)-1, len(cluster.Us))
 
     def test_all_sizes_repeated(self):
         nodes = [256, 256, 256]
         cluster = gc.MultiResGraphClustering(self.G, nodes, k=4)
         self.assertEqual(len(nodes), len(cluster.sizes))
-        self.assertEqual(len([]), len(cluster.Us))
+        for U in cluster.Us:
+            self.assertEqual(U, None)
 
 
 class UpsamplingMatricesTest(unittest.TestCase):
@@ -109,7 +109,7 @@ class MeanUpsModulesTest(unittest.TestCase):
         self.cluster = gc.MultiResGraphClustering(G, nodes_dec, k=4)
         self.model = Sequential()
         for i, U in enumerate(self.cluster.Us):
-            self.add_layer(MeanUps(U, self.cluster.As[i+1], gamma=1))
+            self.add_layer(MeanUps(U, self.cluster.As[i], gamma=1))
 
     def add_layer(self, module):
         self.model.add_module(str(len(self.model) + 1), module)
@@ -163,9 +163,9 @@ class GFUpsTest(unittest.TestCase):
         self.As = []
         self.Us = []
         for i in range(len(cluster.Us)):
-            self.ups.append(GFUps(cluster.Us[i], cluster.As[i+1],
+            self.ups.append(GFUps(cluster.Us[i], cluster.As[i],
                             self.K))
-            self.As.append(Tensor(cluster.As[i+1]))
+            self.As.append(Tensor(cluster.As[i]))
             self.Us.append(Tensor(cluster.Us[i]))
 
     def create_H(self, hs, A):
@@ -205,9 +205,9 @@ class NVGFUpsTest(unittest.TestCase):
         self.As = []
         self.Us = []
         for i in range(len(cluster.Us)):
-            self.ups.append(NVGFUps(cluster.Us[i], cluster.As[i+1],
+            self.ups.append(NVGFUps(cluster.Us[i], cluster.As[i],
                             self.K))
-            self.As.append(Tensor(cluster.As[i+1]))
+            self.As.append(Tensor(cluster.As[i]))
             self.Us.append(Tensor(cluster.Us[i]))
 
     def create_H(self, hs, A):

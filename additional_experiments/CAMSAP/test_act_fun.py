@@ -27,15 +27,14 @@ gamma = 0.5
 type_z = 'alternated'
 
 # Constants
-SAVE = True
+SAVE = False
+N_CPUS = cpu_count()-1
 SEED = 15
 N_P = [0, 0.1, 0.2]
-EXPERIMENTS = [{'af': nn.Tanh(), 'laf': nn.Tanh()},
-               {'af': nn.ReLU(), 'laf': nn.Tanh()},
-               {'af': nn.LeakyReLU(), 'laf': nn.Tanh()},
-               {'af': nn.Tanh(), 'laf': None},
-               {'af': nn.ReLU(), 'laf': None},
-               {'af': nn.LeakyReLU(), 'laf': None}]
+EXPERIMENTS = [{'af': nn.LeakyReLU(0.05), 'laf': nn.Tanh()},
+               {'af': nn.LeakyReLU(0.1), 'laf': nn.Tanh()},
+               {'af': nn.ELU(), 'laf': nn.Tanh()},
+               {'af': nn.CELU(), 'laf': nn.Tanh()}]
 
 N_EXPS = len(EXPERIMENTS)
 
@@ -117,11 +116,12 @@ if __name__ == '__main__':
     start_time = time.time()
     error = np.zeros((len(N_P), n_signals, N_EXPS))
     for i, n_p in enumerate(N_P):
-        print('Noise:', n_p)
+        print('Noise:', n_p, "CPUs used:", N_CPUS)
         results = []
-        with Pool(processes=cpu_count()) as pool:
+        with Pool(processes=N_CPUS) as pool:
             for j in range(n_signals):
-                signal = gs.DifussedSparseGS(G,L,G_params['k'])
+                #signal = gs.DifussedSparseGS(G,L,G_params['k'])
+                signal = gs.MedianDSGS(G,L,G_params['k'])
                 signal.to_unit_norm()
                 results.append(pool.apply_async(test_architecture,
                                            args=[j, signal.x, size,
