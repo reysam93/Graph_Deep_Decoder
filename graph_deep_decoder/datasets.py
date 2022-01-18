@@ -164,7 +164,6 @@ def bandlimited_signal(Lambda, V, p=5, first_p=True, energy=1):
 
 
 class GraphSignal():
-    # TODO: add nonlinearity option!
     @staticmethod
     def create(signal_type, G, non_lin,
                L=6, deltas=4, unit_norm=True, center=False,
