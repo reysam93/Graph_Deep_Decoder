@@ -6,6 +6,7 @@ import networkx as nx
 from pygsp.graphs import (BarabasiAlbert, ErdosRenyi, Graph,
                           StochasticBlockModel)
 from scipy.sparse.csgraph import dijkstra
+from sympy import N
 
 from graph_deep_decoder import utils
 
@@ -190,11 +191,27 @@ class GraphSignal():
         return signal
 
     @staticmethod
-    def add_noise(x, n_p):
+    def add_noise(x, n_p, n_type='gaussian'):
         if n_p == 0:
             return x
+
         x_p = np.square(np.linalg.norm(x))
-        return x + np.random.randn(x.size)*np.sqrt(n_p*x_p/x.size)
+        if n_type == 'gaussian':
+            return x + np.random.randn(x.size)*np.sqrt(n_p*x_p/x.size)
+        elif n_type == 'uniform':
+            noise = np.random.rand(x.size)
+            noise *= x_p*n_p/np.linalg.norm(noise, 2)
+            return x + noise
+        else:
+            raise Exception('Unkown noise type')
+
+    @staticmethod
+    def add_bernoulli_noise(x, n_p):
+        if n_p == 0:
+            return x
+
+        noise_mask = np.random.rand(x.shape[0]) < n_p
+        return np.logical_xor(x, noise_mask)
 
     @staticmethod
     def generate_inpaint_mask(x, p_miss):

@@ -172,7 +172,10 @@ class MultiResGraphClustering():
                         self.As[i-1][k, j] = self.As[i-1][j, k]
                         inter_clust_links += np.sum(sub_A)
             if A_type == Type_A.WEI:
-                self.As[i-1] = self.As[i-1]/inter_clust_links
+                if inter_clust_links == 0:
+                    print('WARNING: disconnected clusters.')
+                else:
+                    self.As[i-1] = self.As[i-1]/inter_clust_links
         return self.As
 
     def plot_labels(self, show=True):

@@ -4,7 +4,8 @@ import math
 
 import numpy as np
 import torch
-from torch import Tensor, eye, manual_seed, nn, no_grad, optim
+from torch import Tensor, eye, nn
+# from torch import Tensor, eye, manual_seed, nn, no_grad, optim
 
 # from graph_deep_decoder.graph_clustering import Ups
 
@@ -34,7 +35,7 @@ class GraphDecoder(nn.Module):
     the model G(C) = ReLU(HC)v, where instead of upsampling a fixed
     low pass graph filter is used.
     """
-    def __init__(self, features, H, scale_std=0.01):
+    def __init__(self, features, H, scale_std=0.01, device='cpu'):
         """
         The arguments are:
         - features: the number of features
@@ -51,6 +52,8 @@ class GraphDecoder(nn.Module):
         std = scale_std/math.sqrt(N)
         self.conv.weight.data.normal_(0, std)
         self.relu = torch.nn.ReLU()
+
+        self.model.to(device)
 
     def forward(self, input):
         return self.relu(self.conv(input)).squeeze().t().mv(self.v)
@@ -100,7 +103,8 @@ class GraphDeepDecoder(nn.Module):
                  batch_norm=False,
                  # Activation functions
                  act_fn=nn.Tanh(), last_act_fn=nn.Tanh(),
-                 input_std=0.01, w_std=0.01):
+                 input_std=0.01, w_std=0.01,
+                 device='cpu'):
         assert len(features) == len(nodes), ERR_DIFF_N_LAYERS
         assert isinstance(ups, Ups) or ups is None, \
             ERR_UNK_UPS.format(ups)
@@ -119,6 +123,7 @@ class GraphDeepDecoder(nn.Module):
         self.act_fn = act_fn
         self.last_act_fn = last_act_fn
         self.w_std = w_std/np.sqrt(features)
+        self.dev = device
         self.build_network()
 
         if self.ups_type is None or self.ups_type is Ups.NONE:
@@ -127,6 +132,9 @@ class GraphDeepDecoder(nn.Module):
             shape = [1, self.fts[0], self.nodes[0]]
         std = input_std/np.sqrt(shape[2])
         self.input = Tensor(torch.zeros(shape)).data.normal_(0, std)
+        self.input = self.input.to(device)
+
+        self.model.to(device)
 
     def add_layer(self, module):
         self.model.add_module(str(len(self.model) + 1), module)
@@ -144,19 +152,19 @@ class GraphDeepDecoder(nn.Module):
                 A = self.As[l] if self.As else None
 
                 if self.ups_type is Ups.LI:
-                    ups = Interpolate(self.nodes[l], self.nodes[l+1])
+                    ups = Interpolate(self.nodes[l], self.nodes[l+1], self.dev)
                 elif self.ups_type is Ups.U_MAT:
-                    ups = Upsampling(self.Us[l])
+                    ups = Upsampling(self.Us[l], self.dev)
                 elif self.ups_type is Ups.U_MEAN:
                     ups = MeanUps(self.Us[l], A,
-                                  self.gamma)
+                                  self.gamma, self.dev)
                 elif self.ups_type is Ups.U_LM:
                     ups = LearnMeanUps(self.Us[l], A,
-                                       self.gamma)
+                                       self.gamma, self.dev)
                 elif self.ups_type is Ups.GF:
-                    ups = GFUps(self.Us[l], A, self.K)
+                    ups = GFUps(self.Us[l], A, self.K, self.dev)
                 elif self.ups_type is Ups.NVGF:
-                    ups = NVGFUps(self.Us[l], A, self.K)
+                    ups = NVGFUps(self.Us[l], A, self.K, self.dev)
                 else:
                     raise RuntimeError('Unknown upsampling type')
 
@@ -175,7 +183,7 @@ class GraphDeepDecoder(nn.Module):
         return self.model
 
     def forward(self, x):
-        return self.model(x).squeeze()
+        return self.model(x).T.squeeze()
 
     def count_params(self):
         return sum(p.numel() for p in self.model.parameters()
@@ -222,11 +230,11 @@ class GraphDeepDecoder(nn.Module):
 
 class Upsampling(nn.Module):
     # NOTE: Previous Ups.NO_A
-    def __init__(self, U):
+    def __init__(self, U, device='cpu'):
         nn.Module.__init__(self)
         self.child_size = U.shape[0]
         self.parent_size = U.shape[1]
-        self.U_T = Tensor(U).t()
+        self.U_T = Tensor(U).t().to(device)
 
     def forward(self, input):
         assert input.shape[0] == 1, ERR_WRONG_INPUT_SIZE
@@ -252,31 +260,31 @@ class Interpolate(nn.Module):
 
 class MeanUps(Upsampling):
     # NOTE: Previous Ups.BIN/WEI
-    def __init__(self, U, A, gamma=0.5):
+    def __init__(self, U, A, gamma=0.5, device='cpu'):
         assert A is not None
         assert np.allclose(A, A.T), ERR_A_NON_SYM
         Upsampling.__init__(self, U)
         # NOTE: Not clear if it is better to normalize A!!
         if np.linalg.matrix_rank(np.diag(np.sum(A, 0))) != A.shape[0]:
             self.A = np.linalg.pinv(np.diag(np.sum(A, 0))).dot(A)
-            print('WARNING: degree matrix is singular')
+            print('WARNING: degree matrix is singular. N:', A.shape[0])
         else:
             self.A = np.linalg.inv(np.diag(np.sum(A, 0))).dot(A)
 
         # self.A = A
         self.A = gamma*np.eye(A.shape[0]) + (1-gamma)*self.A
-        self.A = Tensor(self.A)
-        self.U_T = Tensor(U).t().mm(self.A.t())
+        self.A = Tensor(self.A)  #.to(device)
+        self.U_T = Tensor(U).t().mm(self.A.t()).to(device)
 
 
 class LearnMeanUps(Upsampling):
     # NOTE: previous Learning Gamma
-    def __init__(self, U, A, gamma_init=0.5):
+    def __init__(self, U, A, gamma_init=0.5, device='cpu'):
         assert A is not None
         assert np.allclose(A, A.T), ERR_A_NON_SYM
         Upsampling.__init__(self, U)
-        self.gamma = nn.Parameter(Tensor([gamma_init]))
-        self.A = Tensor(np.linalg.inv(np.diag(np.sum(A, 0))).dot(A))
+        self.gamma = nn.Parameter(Tensor([gamma_init])).to(device)
+        self.A = Tensor(np.linalg.inv(np.diag(np.sum(A, 0))).dot(A)).to(device)
 
     def forward(self, input):
         assert input.shape[0] == 1, ERR_WRONG_INPUT_SIZE
@@ -288,17 +296,17 @@ class LearnMeanUps(Upsampling):
 
 
 class GFUps(Upsampling):
-    def __init__(self, U, A, K):
+    def __init__(self, U, A, K, device='cpu'):
         assert A is not None
         assert np.allclose(A, A.T), ERR_A_NON_SYM
         super(GFUps, self).__init__(U)
         N = A.shape[0]
-        self.hs = nn.Parameter(torch.Tensor(K))
+        self.hs = nn.Parameter(torch.Tensor(K)).to(device)
         stdv = 1. / math.sqrt(K)
         self.hs.data.uniform_(-stdv, stdv)
         self.A = Tensor(A)
         self.K = K
-        self.Apows = torch.zeros(K, N, N)
+        self.Apows = torch.zeros(K, N, N).to(device)
         for i in range(K):
             self.Apows[i, :, :] = torch.matrix_power(self.A, i)
 
@@ -331,45 +339,3 @@ class NVGFUps(Upsampling):
         H = (self.hs.view([self.K, self.child_size, 1])*self.Apows).sum(0)
         output = input[0, :, :].mm(self.U_T.mm(H.t()))
         return output.view([1, n_channels, self.child_size])
-
-
-class GCNN(nn.Module):
-    def __init__(self, features, nodes, S,
-                 input_std=0.01, w_std=0.01):
-        assert len(features) == len(nodes), ERR_DIFF_N_LAYERS
-
-        super(GCNN, self).__init__()
-        self.model = nn.Sequential()
-        self.fts = features
-        self.nodes = nodes
-        self.S = S
-        self.kernel_size = 1
-        self.w_std = w_std/np.sqrt(features)
-        self.build_network()
-
-        shape = [1, self.fts[0], self.nodes[-1]]
-        std = input_std/np.sqrt(shape[2])
-        self.input = Tensor(torch.zeros(shape)).data.normal_(0, std)
-
-    def add_layer(self, module):
-        self.model.add_module(str(len(self.model) + 1), module)
-
-    def build_network(self):
-        ups_skip = 0
-        for l in range(len(self.fts)-1):
-            conv = nn.Conv1d(self.fts[l], self.fts[l+1], self.kernel_size,
-                             bias=False)
-            conv.weight.data.normal_(0, self.w_std[l])
-            self.add_layer(conv)
-            self.add_layer(Upsampling(self.S))
-
-            if l < (len(self.fts)-2):
-                self.add_layer(nn.ReLU())
-        return self.model
-
-    def forward(self, x):
-        return self.model(x).squeeze()
-
-    def count_params(self):
-        return sum(p.numel() for p in self.model.parameters()
-                   if p.requires_grad)

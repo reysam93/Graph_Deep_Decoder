@@ -202,14 +202,6 @@ def choose_eig_sign(EigA, EigB):
     return mask*EigA
 
 
-# def create_filter(G, ps, x=None):
-#     S = np.asarray(G.W.todense())
-#     if ps['S'] is 'A_norm':
-#         eigenvalues, _ = np.linalg.eig(S)
-#         S = S/np.max(np.abs(eigenvalues))
-#     elif ps['S'] is 'A_D_norm':
-#         D_inv_sqrt = np.diag(1/np.sqrt(np.sum(S, axis=0)))
-#         S = D_inv_sqrt.dot(S.dot(D_inv_sqrt))
 def create_filter(S, ps, x=None):
     if ps['type'] is 'BLH':
         _, V = ordered_eig(S)
@@ -242,3 +234,4 @@ def create_filter(S, ps, x=None):
         H /= np.linalg.norm(H)
 
     return H
+    

@@ -1,9 +1,17 @@
 from torch import optim, no_grad, nn, Tensor
+import networkx as nx
 import copy
 import time
 import numpy as np
 
-from graph_deep_decoder.architecture import GFUps
+import torch
+
+import cvxpy as cp
+
+from graph_deep_decoder import utils
+from graph_deep_decoder.architecture import (GFUps, GraphDecoder,
+                                             GraphDeepDecoder)
+from graph_deep_decoder.baselines import GCNN, GAT, KronAE, GUTF
 
 # Optimizer constans
 SGD = 1
@@ -37,22 +45,21 @@ class Model:
                 filter_coefs.append(layer.hs.detach().numpy())
         return np.array(filter_coefs)
 
-    def fit(self, signal, x=None, reduce_err=True):
+    def fit(self, signal, x=None, reduce_err=True, device='cpu'):
         if x is not None:
-            x = Tensor(x)
-        x_n = Tensor(Tensor(signal))
+            x = Tensor(x).to(device)
+        x_n = Tensor(Tensor(signal)).to(device)
 
         best_err = 1000000
         best_net = None
         best_epoch = 0
-        train_err = np.zeros((self.epochs, signal.size))
-        val_err = np.zeros((self.epochs, signal.size))
+        train_err = np.zeros((self.epochs, signal.shape[0]))
+        val_err = np.zeros((self.epochs, signal.shape[0]))
         for i in range(1, self.epochs+1):
             t_start = time.time()
             self.arch.zero_grad()
 
             x_hat = self.arch(self.arch.input)
-
             loss = self.loss(x_hat, x_n)
             loss_red = loss.mean()
 
@@ -65,11 +72,22 @@ class Model:
             if x is not None:
                 with no_grad():
                     eval_loss = self.loss(x_hat, x)
-                    val_err[i-1, :] = eval_loss.detach().numpy()
+                    # val_err[i-1, :] = eval_loss.detach().cpu().numpy()
+                    train_err[i-1, :] = eval_loss.detach().cpu().numpy()
+
+                    if len(x.shape) > 1:
+                        x_hat_aux = torch.argmax(x_hat, dim=1)
+                        x_aux = torch.argmax(x, dim=1)
+                        eval_loss = torch.abs(x_hat_aux - x_aux)/x.shape[0]
+                        val_err[i-1, :] = eval_loss.detach().cpu().numpy()
+                    else:
+                        x_hat_bin = torch.where(x_hat > .5, 1, 0)
+                        eval_loss = torch.abs(x_hat_bin - x)/x.shape[0]
+                        val_err[i-1, :] = eval_loss.detach().cpu().numpy()
 
             loss_red.backward()
             self.optim.step()
-            train_err[i-1, :] = loss.detach().numpy()
+            # train_err[i-1, :] = loss.detach().cpu().numpy()
             t = time.time()-t_start
 
             if self.verbose and i % self.eval_freq == 0:
@@ -79,9 +97,11 @@ class Model:
                       .format(i, self.epochs, t,  err_train_i, err_val_i))
 
         self.arch = best_net
+
         if reduce_err:
             train_err = np.sum(train_err, axis=1)
             val_err = np.sum(val_err, axis=1)
+
         return train_err, val_err, best_epoch
 
     def test(self, x):
@@ -195,6 +215,97 @@ class MedianModel:
 
     def count_params(self):
         return 0
+
+
+# Trend Filtering model
+class GTFModel:
+    def __init__(self, A, k, lamb):
+        L = np.diag(np.sum(A, axis=0)) - A
+        self.lamb = lamb
+        if k % 2 == 0:
+            G = nx.from_numpy_array(A)
+            M = nx.linalg.graphmatrix.incidence_matrix(G).todense()
+            self.Delta = M.T@np.linalg.matrix_power(L, int(k/2))
+        else:
+            self.Delta = np.linalg.matrix_power(L, int((k-1)/2))
+
+    def fit(self, x):
+        self.x_hat = x
+        x_hat = cp.Variable(x.size)
+        obj = cp.Minimize(.5*cp.sum_squares(x-x_hat) +
+                          self.lamb*cp.norm(self.Delta@x_hat, 1))
+
+        prob = cp.Problem(obj)
+        try:
+            prob.solve()
+        except cp.SolverError:
+            print('WARNING: solver error')
+            return
+
+        if prob.status not in ['optimal', 'optimal_inaccurate']:
+            print('WARNING:', prob.status)
+            return
+
+        self.x_hat = x_hat.value
+
+    def test(self, x):
+        err = np.sum((self.x_hat-x)**2)
+        err /= np.linalg.norm(x)**2
+        node_err = err/x.size
+        return node_err, err
+
+    def count_params(self):
+        return 0
+
+
+def select_model(exp, x_n, epochs, lr, device):
+    if exp['type'] == 'TV':
+        return TVModel(exp['A'], exp['alpha'])
+
+    elif exp['type'] == 'LR':
+        return LRModel(exp['L'], exp['alpha'])
+
+    elif exp['type'] == 'BL':
+        _, V = utils.ordered_eig(exp['S'])
+        return BLModel(V, int(V.shape[0]*exp['alpha']))
+
+    elif exp['type'] == 'MED':
+        return MedianModel(exp['S'])
+
+    elif exp['type'] == 'GTF':
+        return GTFModel(exp['A'], exp['k'], exp['lamb'])
+    else:
+        if exp['type'] == '2LD':
+            dec = GraphDecoder(exp['fts'], exp['H'], exp['std'], device=device)
+
+        elif exp['type'] == 'DD':
+            dec = GraphDeepDecoder(exp['fts'], exp['nodes'], exp['Us'],
+                                   batch_norm=exp['bn'], As=exp['As'],
+                                   act_fn=exp['af'], ups=exp['ups'],
+                                   last_act_fn=exp['laf'], device=device,
+                                   input_std=exp['in_std'], w_std=exp['w_std'])
+
+        elif exp['type'] == 'GCNN':
+            dec = GCNN(exp['fts'], exp['A'], x_n, last_fts=exp['last_fts'],
+                       last_act=exp['last_act'],  device=device)
+
+        elif exp['type'] == 'GAT':
+            dec = GAT(exp['fts'], exp['A'], exp['heads'], x_n, device=device)
+
+        elif exp['type'] == 'KronAE':
+            dec = KronAE(exp['fts'], exp['A'], exp['Nt'], x_n, device=device)
+
+        elif exp['type'] == 'GUSC':
+            dec = GUTF(exp['fts'], exp['A'], exp['L'], exp['p'], exp['alpha'],
+                       x_n, device=device)
+        else:
+            raise Exception('Unkwown exp type')
+
+        if 'loss' in exp.keys():
+            return Model(dec, epochs=epochs, learning_rate=lr,
+                         loss_func=exp['loss'])
+
+        return Model(dec, epochs=epochs, learning_rate=lr)
 
 
 # Inpainting models
