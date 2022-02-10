@@ -279,11 +279,16 @@ def select_model(exp, x_n, epochs, lr, device):
             dec = GraphDecoder(exp['fts'], exp['H'], exp['std'], device=device)
 
         elif exp['type'] == 'DD':
+            if 'gamma' in exp.keys():
+                gamma = exp['gamma']
+            else:
+                gamma = .5
             dec = GraphDeepDecoder(exp['fts'], exp['nodes'], exp['Us'],
                                    batch_norm=exp['bn'], As=exp['As'],
                                    act_fn=exp['af'], ups=exp['ups'],
                                    last_act_fn=exp['laf'], device=device,
-                                   input_std=exp['in_std'], w_std=exp['w_std'])
+                                   input_std=exp['in_std'], w_std=exp['w_std'],
+                                   gamma=gamma)
 
         elif exp['type'] == 'GCNN':
             dec = GCNN(exp['fts'], exp['A'], x_n, last_fts=exp['last_fts'],
