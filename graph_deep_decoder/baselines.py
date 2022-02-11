@@ -46,27 +46,36 @@ class GCNN(nn.Module):
 
 # Implemented a 1layer GAT
 class GAT(nn.Module):
-    def __init__(self, fts, A, heads, input, device='cpu'):
+    def __init__(self, fts, A, heads, input, last_act=None, last_fts=1, device='cpu'):
         super(GAT, self).__init__()
+        N = A.shape[0]
+        if len(input.shape) == 1:
+            self.input = Tensor(input).reshape((N, 1)).to(device=device)
+            inp_fts = 1
+        else:
+            self.input = Tensor(input).to(device=device)
+            inp_fts = input.shape[1]
 
         self.model = pyg.nn.Sequential('x, edge_idx, edge_w', [
-            (pyg.nn.GATConv(1, fts, heads, edge_dim=1),
+            (pyg.nn.GATConv(inp_fts, fts, heads, edge_dim=1),
                 'x, edge_idx, edge_w -> x1'),
             nn.ReLU(),
             (pyg.nn.Linear(heads*fts, fts), 'x1 -> x2'),
             nn.ReLU(),
-            (pyg.nn.Linear(fts, 1), 'x2 -> x3'),
+            (pyg.nn.Linear(fts, last_fts), 'x2 -> x3'),
         ])
 
-        N = A.shape[0]
         sparse_adj = pyg.utils.dense_to_sparse(Tensor(A).to(device=device))
         self.edge_idx = sparse_adj[0]
         self.edge_weights = sparse_adj[1]
-        self.input = Tensor(input).reshape((N, 1)).to(device=device)
+        self.last_act = last_act
         self.model.to(device)
 
     def forward(self, x):
-        return self.model(x, self.edge_idx, self.edge_weights).squeeze()
+        out = self.model(x, self.edge_idx, self.edge_weights)
+        if self.last_act:
+            out = self.last_act(out)
+        return out.squeeze()
 
     def count_params(self):
         return sum(p.numel() for p in self.model.parameters()
@@ -75,9 +84,13 @@ class GAT(nn.Module):
 
 # Implemented the Kron-based graph autoencoder
 class KronAE(nn.Module):
-    def __init__(self, fts, A, Nt, input, device='cpu'):
+    def __init__(self, fts, A, r, input, device='cpu'):
+        assert (r >= 0) and (r <= 1), 'r must be between 0 and 1.'
+
         super(KronAE, self).__init__()
         N = A.shape[0]
+        Nt = int(np.round(r*N))
+
         self.fts = fts
         self.dev = device
         self.input = Tensor(input).reshape((N, 1)).to(device=device)
@@ -87,7 +100,8 @@ class KronAE(nn.Module):
         self.edges = sparse_adj[0]
         self.edg_weights = sparse_adj[1]
 
-        sparse_adj_red = pyg.utils.dense_to_sparse(Tensor(self.A_red).to(device=device))
+        sparse_adj_red = pyg.utils.dense_to_sparse(Tensor(self.A_red).
+                                                   to(device=device))
         self.edges_red = sparse_adj_red[0]
         self.edg_weights_r = sparse_adj_red[1]
 
@@ -95,6 +109,9 @@ class KronAE(nn.Module):
         self.model = nn.ModuleList()
         self.model.append(pyg.nn.GCNConv(1, fts))
         self.model.append(pyg.nn.GCNConv(fts, fts))
+
+        # self.model.append(pyg.nn.GCNConv(fts, fts))
+
         self.model.append(pyg.nn.GCNConv(fts, 1))
         self.relu = nn.ReLU()
         self.FC = nn.Linear(fts, fts).to(device)
@@ -104,10 +121,10 @@ class KronAE(nn.Module):
         node_deg = np.sum(A, axis=0)
         L = np.diag(node_deg) - A
 
-        # Nt nodes with lowest degree will be conserved (as in the paper)
+        # Nt nodes with largest degree will be conserved (as in the paper)
         ord_idxs = node_deg.argsort()
-        idxs_t = ord_idxs[:Nt]
-        idxs_s = ord_idxs[Nt:]
+        idxs_t = ord_idxs[-Nt:]
+        idxs_s = ord_idxs[:Nt]
 
         L_tt = L[idxs_t, :][:, idxs_t]
         L_ss = L[idxs_s, :][:, idxs_s]
@@ -119,12 +136,20 @@ class KronAE(nn.Module):
         self.idxs_t = idxs_t
 
     def forward(self, x):
+        # X1 = self.relu(self.model[0](x, self.edges, self.edg_weights))
+        # X1_red = X1[self.idxs_t, :]
+        # X2 = self.relu(self.model[1](X1_red, self.edges_red, self.edg_weights_r))
+        # X3 = self.relu(self.FC(X2))
+        # X4 = torch.zeros(x.shape[0], self.fts).to(self.dev)
+        # X4[self.idxs_t, :] = X3
+        # return self.model[2](X4, self.edges, self.edg_weights).squeeze()
+
         X1 = self.relu(self.model[0](x, self.edges, self.edg_weights))
         X1_red = X1[self.idxs_t, :]
-        X2 = self.relu(self.model[1](X1_red, self.edges_red, self.edg_weights_r))
-        X3 = self.relu(self.FC(X2))
-        X4 = torch.zeros(x.shape[0], self.fts).to(self.dev)
-        X4[self.idxs_t, :] = X3
+        X2 = self.relu(self.FC(X1_red))
+        X3 = torch.zeros(x.shape[0], self.fts).to(self.dev)
+        X3[self.idxs_t, :] = X2
+        X4 = self.relu(self.model[1](X3, self.edges, self.edg_weights))
         return self.model[2](X4, self.edges, self.edg_weights).squeeze()
 
     def count_params(self):

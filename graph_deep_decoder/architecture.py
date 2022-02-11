@@ -267,7 +267,7 @@ class MeanUps(Upsampling):
         # NOTE: Not clear if it is better to normalize A!!
         if np.linalg.matrix_rank(np.diag(np.sum(A, 0))) != A.shape[0]:
             self.A = np.linalg.pinv(np.diag(np.sum(A, 0))).dot(A)
-            print('WARNING: degree matrix is singular. N:', A.shape[0])
+            # print('WARNING: degree matrix is singular. N:', A.shape[0])
         else:
             self.A = np.linalg.inv(np.diag(np.sum(A, 0))).dot(A)
 

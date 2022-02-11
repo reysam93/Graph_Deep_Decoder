@@ -45,7 +45,27 @@ class Model:
                 filter_coefs.append(layer.hs.detach().numpy())
         return np.array(filter_coefs)
 
-    def fit(self, signal, x=None, reduce_err=True, device='cpu'):
+    def val_err_as_classif(self, x, x_hat):
+        if len(x.shape) > 1:
+            x_hat_aux = torch.argmax(x_hat, dim=1)
+            x_aux = torch.argmax(x, dim=1)
+            eval_loss = torch.abs(x_hat_aux - x_aux)/x.shape[0]
+            return eval_loss.detach().cpu().numpy()
+        else:
+            # x_hat_bin = torch.where(x_hat > .5, 1, 0)
+            # eval_loss = torch.abs(x_hat_bin - x)/x.shape[0]
+            x_hat_label = torch.round(x_hat)
+            # Set maximum allowed label
+            max_label = x.max()
+            x_hat_label[x_hat_label > max_label] = max_label
+            # eval_loss = torch.abs(x_hat_label - x)/x.shape[0]
+            eval_loss = torch.eq(x_hat_label, x)/x.shape[0]
+            return eval_loss.detach().cpu().numpy()
+
+    def fit(self, signal, x=None, reduce_err=True, class_val=False, device='cpu'):
+        # NOTE: true signal x will only be used to obtain the true error for
+        # each iteration to plot it, but it must not influence the learning of
+        # the parameters
         if x is not None:
             x = Tensor(x).to(device)
         x_n = Tensor(Tensor(signal)).to(device)
@@ -71,23 +91,22 @@ class Model:
             # Evaluate if the model is overfitting noise
             if x is not None:
                 with no_grad():
-                    eval_loss = self.loss(x_hat, x)
-                    # val_err[i-1, :] = eval_loss.detach().cpu().numpy()
-                    train_err[i-1, :] = eval_loss.detach().cpu().numpy()
-
-                    if len(x.shape) > 1:
-                        x_hat_aux = torch.argmax(x_hat, dim=1)
-                        x_aux = torch.argmax(x, dim=1)
-                        eval_loss = torch.abs(x_hat_aux - x_aux)/x.shape[0]
-                        val_err[i-1, :] = eval_loss.detach().cpu().numpy()
+                    if class_val:
+                        val_err[i-1, :] = self.val_err_as_classif(x, x_hat)
+                    
                     else:
-                        x_hat_bin = torch.where(x_hat > .5, 1, 0)
-                        eval_loss = torch.abs(x_hat_bin - x)/x.shape[0]
+                        eval_loss = self.loss(x_hat, x)
                         val_err[i-1, :] = eval_loss.detach().cpu().numpy()
+
+                    # COMMENT!
+                    eval_loss = self.loss(x_hat, x)
+                    train_err[i-1, :] = eval_loss.detach().cpu().numpy()
 
             loss_red.backward()
             self.optim.step()
+
             # train_err[i-1, :] = loss.detach().cpu().numpy()
+
             t = time.time()-t_start
 
             if self.verbose and i % self.eval_freq == 0:
@@ -298,7 +317,7 @@ def select_model(exp, x_n, epochs, lr, device):
             dec = GAT(exp['fts'], exp['A'], exp['heads'], x_n, device=device)
 
         elif exp['type'] == 'KronAE':
-            dec = KronAE(exp['fts'], exp['A'], exp['Nt'], x_n, device=device)
+            dec = KronAE(exp['fts'], exp['A'], exp['r'], x_n, device=device)
 
         elif exp['type'] == 'GUSC':
             dec = GUTF(exp['fts'], exp['A'], exp['L'], exp['p'], exp['alpha'],

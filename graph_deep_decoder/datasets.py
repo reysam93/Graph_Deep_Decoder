@@ -214,6 +214,14 @@ class GraphSignal():
         return np.logical_xor(x, noise_mask)
 
     @staticmethod
+    def change_labels(x, r):
+        if r == 0:
+            return x
+
+        mask = np.random.rand(x.shape[0]) < r
+        return np.where(mask, np.random.randint(x.max()+1, size=x.shape), x)
+
+    @staticmethod
     def generate_inpaint_mask(x, p_miss):
         mask = np.ones(x.size)
         mask[np.random.choice(x.size, int(x.size*p_miss), replace=False)] = 0

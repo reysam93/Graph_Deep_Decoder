@@ -234,4 +234,3 @@ def create_filter(S, ps, x=None):
         H /= np.linalg.norm(H)
 
     return H
-    
