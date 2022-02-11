@@ -52,17 +52,15 @@ class Model:
             eval_loss = torch.abs(x_hat_aux - x_aux)/x.shape[0]
             return eval_loss.detach().cpu().numpy()
         else:
-            # x_hat_bin = torch.where(x_hat > .5, 1, 0)
-            # eval_loss = torch.abs(x_hat_bin - x)/x.shape[0]
             x_hat_label = torch.round(x_hat)
             # Set maximum allowed label
             max_label = x.max()
             x_hat_label[x_hat_label > max_label] = max_label
-            # eval_loss = torch.abs(x_hat_label - x)/x.shape[0]
-            eval_loss = torch.eq(x_hat_label, x)/x.shape[0]
+            eval_loss = torch.ne(x_hat_label, x)/x.shape[0]
             return eval_loss.detach().cpu().numpy()
 
-    def fit(self, signal, x=None, reduce_err=True, class_val=False, device='cpu'):
+    def fit(self, signal, x=None, reduce_err=True, class_val=False,
+            device='cpu'):
         # NOTE: true signal x will only be used to obtain the true error for
         # each iteration to plot it, but it must not influence the learning of
         # the parameters
