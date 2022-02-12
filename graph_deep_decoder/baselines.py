@@ -84,13 +84,14 @@ class GAT(nn.Module):
 
 # Implemented the Kron-based graph autoencoder
 class KronAE(nn.Module):
-    def __init__(self, fts, A, r, input, device='cpu'):
+    def __init__(self, fts, A, r, input, last_act=None, device='cpu'):
         assert (r >= 0) and (r <= 1), 'r must be between 0 and 1.'
 
         super(KronAE, self).__init__()
         N = A.shape[0]
         Nt = int(np.round(r*N))
 
+        self.last_act = last_act
         self.fts = fts
         self.dev = device
         self.input = Tensor(input).reshape((N, 1)).to(device=device)
@@ -109,9 +110,6 @@ class KronAE(nn.Module):
         self.model = nn.ModuleList()
         self.model.append(pyg.nn.GCNConv(1, fts))
         self.model.append(pyg.nn.GCNConv(fts, fts))
-
-        # self.model.append(pyg.nn.GCNConv(fts, fts))
-
         self.model.append(pyg.nn.GCNConv(fts, 1))
         self.relu = nn.ReLU()
         self.FC = nn.Linear(fts, fts).to(device)
@@ -121,7 +119,7 @@ class KronAE(nn.Module):
         node_deg = np.sum(A, axis=0)
         L = np.diag(node_deg) - A
 
-        # Nt nodes with largest degree will be conserved (as in the paper)
+        # Nt nodes with largest degree will be conserved
         ord_idxs = node_deg.argsort()
         idxs_t = ord_idxs[-Nt:]
         idxs_s = ord_idxs[:Nt]
@@ -131,26 +129,21 @@ class KronAE(nn.Module):
         L_ts = L[idxs_t, :][:, idxs_s]
 
         # Assuming graph is undirected
-        L_red = L_tt - L_ts@np.linalg.inv(L_ss)@L_ts.T
+        L_red = L_tt - L_ts@np.linalg.pinv(L_ss)@L_ts.T
         self.A_red = np.diag(np.diag(L_red)) - L_red
         self.idxs_t = idxs_t
 
     def forward(self, x):
-        # X1 = self.relu(self.model[0](x, self.edges, self.edg_weights))
-        # X1_red = X1[self.idxs_t, :]
-        # X2 = self.relu(self.model[1](X1_red, self.edges_red, self.edg_weights_r))
-        # X3 = self.relu(self.FC(X2))
-        # X4 = torch.zeros(x.shape[0], self.fts).to(self.dev)
-        # X4[self.idxs_t, :] = X3
-        # return self.model[2](X4, self.edges, self.edg_weights).squeeze()
-
         X1 = self.relu(self.model[0](x, self.edges, self.edg_weights))
         X1_red = X1[self.idxs_t, :]
         X2 = self.relu(self.FC(X1_red))
         X3 = torch.zeros(x.shape[0], self.fts).to(self.dev)
         X3[self.idxs_t, :] = X2
         X4 = self.relu(self.model[1](X3, self.edges, self.edg_weights))
-        return self.model[2](X4, self.edges, self.edg_weights).squeeze()
+        out = self.model[2](X4, self.edges, self.edg_weights).squeeze()
+        if self.last_act:
+            return self.last_act(out)
+        return out
 
     def count_params(self):
         return sum(p.numel() for p in self.model.parameters()

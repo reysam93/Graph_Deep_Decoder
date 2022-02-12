@@ -45,7 +45,7 @@ class Model:
                 filter_coefs.append(layer.hs.detach().numpy())
         return np.array(filter_coefs)
 
-    def val_err_as_classif(self, x, x_hat):
+    def classif_err(self, x_hat, x):
         if len(x.shape) > 1:
             x_hat_aux = torch.argmax(x_hat, dim=1)
             x_aux = torch.argmax(x, dim=1)
@@ -90,20 +90,15 @@ class Model:
             if x is not None:
                 with no_grad():
                     if class_val:
-                        val_err[i-1, :] = self.val_err_as_classif(x, x_hat)
-                    
+                        val_err[i-1, :] = self.classif_err(x_hat, x)
                     else:
                         eval_loss = self.loss(x_hat, x)
                         val_err[i-1, :] = eval_loss.detach().cpu().numpy()
 
-                    # COMMENT!
-                    eval_loss = self.loss(x_hat, x)
-                    train_err[i-1, :] = eval_loss.detach().cpu().numpy()
-
             loss_red.backward()
             self.optim.step()
 
-            # train_err[i-1, :] = loss.detach().cpu().numpy()
+            train_err[i-1, :] = loss.detach().cpu().numpy()
 
             t = time.time()-t_start
 
@@ -121,19 +116,45 @@ class Model:
 
         return train_err, val_err, best_epoch
 
-    def test(self, x):
+    def test(self, x, classif=False):
         x_hat = self.arch(self.arch.input).squeeze()
-        node_err = self.loss(x_hat, Tensor(x)).detach().numpy()
-        x_hat = x_hat.detach().numpy()
-        err = np.sum(node_err)/np.linalg.norm(x)**2
-        return np.median(node_err), err
+        if classif:
+            node_err = self.classif_err(x_hat, Tensor(x)).detach().numpy()
+            err = np.sum(node_err)
+        else:
+            node_err = self.loss(x_hat, Tensor(x)).detach().numpy()
+            err = np.sum(node_err)/np.linalg.norm(x)**2
+        return np.mean(node_err), err
 
 
-class BLModel:
+class CVXModel:
+    def __init__(self):
+        self.x_hat = None
+
+    def count_params(self):
+        return 0
+
+    def fit(self, signal):
+        raise Exception('Method "fit" not implemented.')
+
+    def test(self, x):
+        err = np.linalg.norm(x-self.x_hat)**2/np.linalg.norm(x)**2
+        node_err = err/x.size
+        return node_err, err
+
+    def test_classification(self, x):
+        x_hat_label = np.round(self.x_hat)
+        max_label = x.max()
+        x_hat_label[x_hat_label > max_label] = max_label
+        node_err = np.not_equal(x_hat_label, x)/x.shape[0]
+        return node_err, np.sum(node_err)
+
+
+class BLModel(CVXModel):
     def __init__(self, V, coefs):
+        super(BLModel, self).__init__()
         self.V = V
         self.k = min(coefs, V.shape[0])
-        self.x_k = None
 
     def count_params(self):
         return self.coefs
@@ -141,33 +162,21 @@ class BLModel:
     def fit(self, signal):
         self.x_hat = self.V[:, :self.k].dot(self.V[:, :self.k].T.dot(signal))
 
-    def test(self, x):
-        err = np.linalg.norm(x-self.x_hat)**2
-        err /= np.linalg.norm(x)**2
-        node_err = err/x.size
-        return node_err, err
 
-
-class MeanModel:
+class MeanModel(CVXModel):
     def __init__(self, A):
+        super(MeanModel, self).__init__()
         self.A = A
         self.D_inv = np.diag(1/self.A.sum(axis=1))
 
     def fit(self, signal):
-        self.x_mean = self.D_inv.dot(self.A).dot(signal)
-
-    def test(self, x):
-        err = np.sum((self.x_mean-x)**2)/np.linalg.norm(x)**2
-        node_err = err/x.size
-        return node_err, err
-
-    def count_params(self):
-        return 0
+        self.x_hat = self.D_inv.dot(self.A).dot(signal)
 
 
 # Total Variation/Graph Filtering model
-class TVModel:
+class TVModel(CVXModel):
     def __init__(self, A, alhpa):
+        super(TVModel, self).__init__()
         assert np.isreal(A).all(), 'Only real matrices supported'
         eig_vals, _ = np.linalg.eig(A)
         self.A = A/np.max(np.abs(eig_vals))
@@ -180,19 +189,11 @@ class TVModel:
         H_A = np.linalg.inv(Eye+self.alpha*A_hat.T.dot(A_hat))
         self.x_hat = np.asarray(H_A.dot(signal))
 
-    def test(self, x):
-        err = np.sum((self.x_hat-x)**2)
-        err /= np.linalg.norm(x)**2
-        node_err = err/x.size
-        return node_err, err
-
-    def count_params(self):
-        return 0
-
 
 # Laplazian Regularizer
-class LRModel:
+class LRModel(CVXModel):
     def __init__(self, L, alhpa):
+        super(LRModel, self).__init__()
         self.L = L
         self.alpha = alhpa
 
@@ -202,19 +203,11 @@ class LRModel:
         self.x_hat = np.linalg.inv(Eye+self.alpha*self.L).dot(signal)
         self.x_hat = np.asarray(self.x_hat)
 
-    def test(self, x):
-        err = np.sum((self.x_hat-x)**2)
-        err /= np.linalg.norm(x)**2
-        node_err = err/x.size
-        return node_err, err
-
-    def count_params(self):
-        return 0
-
 
 # median filter
-class MedianModel:
+class MedianModel(CVXModel):
     def __init__(self, A):
+        super(MedianModel, self).__init__()
         self.A = A + np.eye(A.shape[0])
 
     def fit(self, x):
@@ -224,19 +217,11 @@ class MedianModel:
             neighbours = x[neighbours_ind]
             self.x_hat[i] = np.median(neighbours)
 
-    def test(self, x):
-        err = np.sum((self.x_hat-x)**2)
-        err /= np.linalg.norm(x)**2
-        node_err = err/x.size
-        return node_err, err
-
-    def count_params(self):
-        return 0
-
 
 # Trend Filtering model
-class GTFModel:
+class GTFModel(CVXModel):
     def __init__(self, A, k, lamb):
+        super(GTFModel, self).__init__()
         L = np.diag(np.sum(A, axis=0)) - A
         self.lamb = lamb
         if k % 2 == 0:
@@ -264,15 +249,6 @@ class GTFModel:
             return
 
         self.x_hat = x_hat.value
-
-    def test(self, x):
-        err = np.sum((self.x_hat-x)**2)
-        err /= np.linalg.norm(x)**2
-        node_err = err/x.size
-        return node_err, err
-
-    def count_params(self):
-        return 0
 
 
 def select_model(exp, x_n, epochs, lr, device):
