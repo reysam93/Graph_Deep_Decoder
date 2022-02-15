@@ -179,11 +179,12 @@ class MultiResGraphClustering():
         return self.As
 
     def plot_labels(self, show=True):
-        n_labels = len(self.labels)
-        _, axes = plt.subplots(1, n_labels)
         self.G.set_coordinates()
-        for i in range(n_labels):
-            self.G.plot_signal(self.labels[i], ax=axes[i])
+        for i, label in enumerate(self.labels):
+            plt.figure()
+            self.G.plot_signal(label)
+            plt.title('Clusters:' + str(self.sizes[i]))
+
         if show:
             plt.show()
 
