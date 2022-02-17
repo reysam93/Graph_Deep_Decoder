@@ -178,9 +178,12 @@ class MultiResGraphClustering():
                     self.As[i-1] = self.As[i-1]/inter_clust_links
         return self.As
 
-    def plot_labels(self, show=True):
+    def plot_labels(self, n_plots=None, show=True):
         self.G.set_coordinates()
-        for i, label in enumerate(self.labels):
+        n_labels = len(self.labels)
+        n_plots = min(n_plots, n_labels) if n_plots else n_labels
+        for i in range(n_plots):
+            label = self.labels[i]
             plt.figure()
             self.G.plot_signal(label)
             plt.title('Clusters:' + str(self.sizes[i]))
