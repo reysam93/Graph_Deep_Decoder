@@ -266,13 +266,12 @@ class MeanUps(Upsampling):
         # NOTE: Not clear if it is better to normalize A!!
         if np.linalg.matrix_rank(np.diag(np.sum(A, 0))) != A.shape[0]:
             self.A = np.linalg.pinv(np.diag(np.sum(A, 0))).dot(A)
-            # print('WARNING: degree matrix is singular. N:', A.shape[0])
         else:
             self.A = np.linalg.inv(np.diag(np.sum(A, 0))).dot(A)
             # D_inv_sqrt = 1/np.sqrt(np.sum(A, 0))
             # self.A = D_inv_sqrt@A@D_inv_sqrt
 
-        self.A = A
+        # self.A = A
         self.A = gamma*np.eye(A.shape[0]) + (1-gamma)*self.A
         self.A = Tensor(self.A)
         self.U_T = Tensor(U).t().mm(self.A.t()).to(device)

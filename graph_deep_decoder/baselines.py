@@ -20,20 +20,6 @@ class GCNN(nn.Module):
             self.input = Tensor(input).to(device=device)
             inp_fts = input.shape[1]
 
-        # self.model = pyg.nn.Sequential('x, edge_idx, edge_weight', [
-        #     (pyg.nn.GCNConv(inp_fts, fts), 'x, edge_idx, edge_weight -> x1'),
-        #     act,
-        #     (pyg.nn.GCNConv(fts, fts), 'x1, edge_idx, edge_weight -> x2'),
-        #     act,
-        #     (pyg.nn.GCNConv(fts, last_fts), 'x2, edge_idx, edge_weight -> x3'),
-        # ])
-
-        # sparse_adj = pyg.utils.dense_to_sparse(Tensor(A).to(device=device))
-        # self.edge_idx = sparse_adj[0]
-        # self.edge_weights = sparse_adj[1]
-        # self.last_act = last_act
-        # self.model.to(device)
-
         self.act = act
         self.last_act = last_act
         self.convs = nn.ModuleList()
@@ -47,9 +33,9 @@ class GCNN(nn.Module):
         self.lins = nn.ModuleList()
         for i in range(n_lin):
             if i == n_lin-1:
-                self.lins.append(nn.Linear(fts, last_fts, bias=True))
+                self.lins.append(nn.Linear(fts, last_fts))
             else:
-                self.lins.append(nn.Linear(fts, fts, bias=True))
+                self.lins.append(nn.Linear(fts, fts))
 
         sparse_adj = pyg.utils.dense_to_sparse(Tensor(A).to(device=device))
         self.edge_idx = sparse_adj[0]
@@ -58,11 +44,6 @@ class GCNN(nn.Module):
         self.lins.to(device)
 
     def forward(self, x):
-        # out = self.model(x, self.edge_idx, self.edge_weights)
-        # if self.last_act:
-        #     out = self.last_act(out)
-        # return out.squeeze()
-
         x_out = x
         for i, conv in enumerate(self.convs):
             x_out = conv(x_out, self.edge_idx, self.edge_weights)
@@ -97,21 +78,6 @@ class GAT(nn.Module):
             self.input = Tensor(input).to(device=device)
             inp_fts = input.shape[1]
 
-        # self.model = pyg.nn.Sequential('x, edge_idx, edge_w', [
-        #     (pyg.nn.GATConv(inp_fts, fts, heads, edge_dim=1),
-        #         'x, edge_idx, edge_w -> x1'),
-        #     nn.ReLU(),
-        #     (pyg.nn.Linear(heads*fts, fts), 'x1 -> x2'),
-        #     nn.ReLU(),
-        #     (pyg.nn.Linear(fts, last_fts), 'x2 -> x3'),
-        # ])
-
-        # sparse_adj = pyg.utils.dense_to_sparse(Tensor(A).to(device=device))
-        # self.edge_idx = sparse_adj[0]
-        # self.edge_weights = sparse_adj[1]
-        # self.last_act = last_act
-        # self.model.to(device)
-
         self.ats = nn.ModuleList()
         if n_at == 1 and n_lin == 0:
             self.ats.append(pyg.nn.GATConv(inp_fts, last_fts, heads,
@@ -128,14 +94,14 @@ class GAT(nn.Module):
 
         self.lins = nn.ModuleList()
         if n_lin == 1:
-            self.lins.append(nn.Linear(heads*fts, last_fts, bias=True))
+            self.lins.append(nn.Linear(heads*fts, last_fts))
         elif n_lin > 1:
-            self.lins.append(nn.Linear(heads*fts, fts, bias=True))
+            self.lins.append(nn.Linear(heads*fts, fts))
         for i in range(1, n_lin):
             if i == n_lin-1:
-                self.lins.append(nn.Linear(fts, last_fts, bias=True))
+                self.lins.append(nn.Linear(fts, last_fts))
             else:
-                self.lins.append(nn.Linear(fts, fts, bias=True))
+                self.lins.append(nn.Linear(fts, fts))
 
         sparse_adj = pyg.utils.dense_to_sparse(Tensor(A).to(device=device))
         self.edge_idx = sparse_adj[0]
@@ -146,11 +112,6 @@ class GAT(nn.Module):
         self.lins.to(device)
 
     def forward(self, x):
-        # out = self.model(x, self.edge_idx, self.edge_weights)
-        # if self.last_act:
-        #     out = self.last_act(out)
-        # return out.squeeze()
-
         x_out = x
         for i, at in enumerate(self.ats):
             x_out = at(x_out, self.edge_idx, self.edge_weights)
