@@ -140,7 +140,6 @@ class GraphDeepDecoder(nn.Module):
         self.model.add_module(str(len(self.model) + 1), module)
 
     def build_network(self):
-        ups_skip = 0
         for l in range(len(self.fts)-1):
             conv = nn.Conv1d(self.fts[l], self.fts[l+1], self.kernel_size,
                              bias=False)
@@ -270,10 +269,12 @@ class MeanUps(Upsampling):
             # print('WARNING: degree matrix is singular. N:', A.shape[0])
         else:
             self.A = np.linalg.inv(np.diag(np.sum(A, 0))).dot(A)
+            # D_inv_sqrt = 1/np.sqrt(np.sum(A, 0))
+            # self.A = D_inv_sqrt@A@D_inv_sqrt
 
-        # self.A = A
+        self.A = A
         self.A = gamma*np.eye(A.shape[0]) + (1-gamma)*self.A
-        self.A = Tensor(self.A)  #.to(device)
+        self.A = Tensor(self.A)
         self.U_T = Tensor(U).t().mm(self.A.t()).to(device)
 
 

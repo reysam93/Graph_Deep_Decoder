@@ -86,6 +86,10 @@ class Model:
                 best_err = loss_red
                 best_net = copy.deepcopy(self.arch)
 
+            loss_red.backward()
+            self.optim.step()
+            train_err[i-1, :] = loss.detach().cpu().numpy()
+
             # Evaluate if the model is overfitting noise
             if x is not None:
                 with no_grad():
@@ -94,11 +98,6 @@ class Model:
                     else:
                         eval_loss = self.loss(x_hat, x)
                         val_err[i-1, :] = eval_loss.detach().cpu().numpy()
-
-            loss_red.backward()
-            self.optim.step()
-
-            train_err[i-1, :] = loss.detach().cpu().numpy()
 
             t = time.time()-t_start
 
@@ -272,10 +271,7 @@ def select_model(exp, x_n, epochs, lr, device):
             dec = GraphDecoder(exp['fts'], exp['H'], exp['std'], device=device)
 
         elif exp['type'] == 'DD':
-            if 'gamma' in exp.keys():
-                gamma = exp['gamma']
-            else:
-                gamma = .5
+            gamma = exp['gamma'] if 'gamma' in exp.keys() else .5
             dec = GraphDeepDecoder(exp['fts'], exp['nodes'], exp['Us'],
                                    batch_norm=exp['bn'], As=exp['As'],
                                    act_fn=exp['af'], ups=exp['ups'],
@@ -284,11 +280,19 @@ def select_model(exp, x_n, epochs, lr, device):
                                    gamma=gamma)
 
         elif exp['type'] == 'GCNN':
+            n_convs = exp['n_convs'] if 'n_convs' in exp.keys() else 3
+            n_lin = exp['n_lin'] if 'n_lin' in exp.keys() else 0
+            act = exp['act'] if 'act' in exp.keys() else nn.ReLU()
             dec = GCNN(exp['fts'], exp['A'], x_n, last_fts=exp['last_fts'],
-                       last_act=exp['last_act'],  device=device)
+                       last_act=exp['last_act'],  device=device, act=act,
+                       n_convs=n_convs, n_lin=n_lin)
 
         elif exp['type'] == 'GAT':
-            dec = GAT(exp['fts'], exp['A'], exp['heads'], x_n, device=device)
+            n_at = exp['n_at'] if 'n_at' in exp.keys() else 1
+            n_lin = exp['n_lin'] if 'n_lin' in exp.keys() else 2
+            act = exp['act'] if 'act' in exp.keys() else nn.ReLU()
+            dec = GAT(exp['fts'], exp['A'], exp['heads'], x_n, device=device,
+                      n_at=n_at, n_lin=n_lin, act=act)
 
         elif exp['type'] == 'KronAE':
             dec = KronAE(exp['fts'], exp['A'], exp['r'], x_n, device=device)
