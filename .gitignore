@@ -2,4 +2,9 @@
 2Layer_Decoder_Exps/*.py
 2Layer_Decoder_Exps/.ipynb_checkpoints
 .ipynb_checkpoints
-datasets/Temperare-GSOD
+datasets/Temperature-GSOD/
+dataset/Temperature-GSOD/
+!datasets/Temperature-GSOD/daily_temperature_USA_2003.csv
+!datasets/Temperature-GSOD/readme.txt
+tmp/
+results/

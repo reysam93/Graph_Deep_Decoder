@@ -259,7 +259,9 @@ def select_model(exp, x_n, epochs, lr, device):
 
     elif exp['type'] == 'BL':
         _, V = utils.ordered_eig(exp['S'])
-        return BLModel(V, int(V.shape[0]*exp['alpha']))
+        N = V.shape[0]
+        coefs = int(N*exp['alpha']) if exp['alpha'] <= 1 else exp['alpha']
+        return BLModel(V, coefs)
 
     elif exp['type'] == 'MED':
         return MedianModel(exp['S'])

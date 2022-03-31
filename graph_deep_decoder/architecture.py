@@ -44,16 +44,16 @@ class GraphDecoder(nn.Module):
         """
         super().__init__()
         N = H.shape[0]
-        self.input = Tensor(H).view([1, N, N])
+        self.input = Tensor(H).view([1, N, N]).to(device)
         self.v = torch.ones(features)/math.sqrt(features)
         self.v[math.ceil(features/2):] *= -1
+        self.v = self.v.to(device)
         self.conv = nn.Conv1d(N, features, kernel_size=1,
                               bias=False)
         std = scale_std/math.sqrt(N)
         self.conv.weight.data.normal_(0, std)
         self.relu = torch.nn.ReLU()
-
-        self.model.to(device)
+        self.conv.to(device)
 
     def forward(self, input):
         return self.relu(self.conv(input)).squeeze().t().mv(self.v)
