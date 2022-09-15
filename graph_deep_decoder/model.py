@@ -13,6 +13,9 @@ from graph_deep_decoder.architecture import (GFUps, GraphDecoder,
                                              GraphDeepDecoder)
 from graph_deep_decoder.baselines import GCNN, GAT, KronAE, GUTF
 
+# For unrolling
+# import GUN.models
+
 # Optimizer constans
 SGD = 1
 ADAM = 0
@@ -60,12 +63,15 @@ class Model:
             return eval_loss.detach().cpu().numpy()
 
     def fit(self, signal, x=None, reduce_err=True, class_val=False,
-            device='cpu'):
+            device='cpu', adj_list=None):
         # NOTE: true signal x will only be used to obtain the true error for
         # each iteration to plot it, but it must not influence the learning of
         # the parameters
         if x is not None:
             x = Tensor(x).to(device)
+            if adj_list is not None:
+                x = x.reshape((x.size(0), 1))
+
         x_n = Tensor(Tensor(signal)).to(device)
 
         best_err = 1000000
@@ -77,7 +83,13 @@ class Model:
             t_start = time.time()
             self.arch.zero_grad()
 
-            x_hat = self.arch(self.arch.input)
+            if adj_list == None:
+                # Our models
+                x_hat = self.arch(self.arch.input)
+            else:
+                # IN UNROLLING
+                x_hat = self.arch(x_n, adj_list)
+
             loss = self.loss(x_hat, x_n)
             loss_red = loss.mean()
 
@@ -88,7 +100,11 @@ class Model:
 
             loss_red.backward()
             self.optim.step()
-            train_err[i-1, :] = loss.detach().cpu().numpy()
+
+            if adj_list == None:
+                train_err[i-1, :] = loss.detach().cpu().numpy()
+            else:
+                train_err[i-1, :] = loss.detach().cpu().numpy().reshape((x_hat.size(0)))
 
             # Evaluate if the model is overfitting noise
             if x is not None:
@@ -97,7 +113,10 @@ class Model:
                         val_err[i-1, :] = self.classif_err(x_hat, x)
                     else:
                         eval_loss = self.loss(x_hat, x)
-                        val_err[i-1, :] = eval_loss.detach().cpu().numpy()
+                        if adj_list == None:
+                            val_err[i-1, :] = eval_loss.detach().cpu().numpy()
+                        else:
+                            val_err[i-1, :] = eval_loss.detach().cpu().numpy().reshape((x_hat.size(0)))
 
             t = time.time()-t_start
 
@@ -299,9 +318,18 @@ def select_model(exp, x_n, epochs, lr, device):
         elif exp['type'] == 'KronAE':
             dec = KronAE(exp['fts'], exp['A'], exp['r'], x_n, device=device)
 
-        elif exp['type'] == 'GUSC':
-            dec = GUTF(exp['fts'], exp['A'], exp['L'], exp['p'], exp['alpha'],
-                       x_n, device=device)
+        elif exp['type'] == 'UNROLLING':
+            # My own implementation
+            # dec = GUTF(exp['fts'], exp['A'], exp['L'], exp['p'], exp['alpha'],
+            #            x_n, device=device)
+
+            x_n_tensor = torch.Tensor(x_n).reshape((x_n.size, 1))
+            dec = getattr(GUN.models, exp['arch'])(1, exp['fts'], 1,
+                                                   exp['dropout'],
+                                                   exp['adj'],
+                                                   x_n_tensor,
+                                                   Delta=exp['Delta'])
+            # arch = arch.cuda()
         else:
             raise Exception('Unkwown exp type')
 
