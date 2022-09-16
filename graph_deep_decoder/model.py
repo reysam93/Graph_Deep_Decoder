@@ -14,7 +14,7 @@ from graph_deep_decoder.architecture import (GFUps, GraphDecoder,
 from graph_deep_decoder.baselines import GCNN, GAT, KronAE, GUTF
 
 # For unrolling
-# import GUN.models
+import GUN.models
 
 # Optimizer constans
 SGD = 1
@@ -83,12 +83,14 @@ class Model:
             t_start = time.time()
             self.arch.zero_grad()
 
-            if adj_list == None:
+            if adj_list is None:
                 # Our models
                 x_hat = self.arch(self.arch.input)
             else:
                 # IN UNROLLING
                 x_hat = self.arch(x_n, adj_list)
+                if x_hat.dim() == 3:
+                    x_hat = x_hat[:, 0, :]
 
             loss = self.loss(x_hat, x_n)
             loss_red = loss.mean()
@@ -101,7 +103,7 @@ class Model:
             loss_red.backward()
             self.optim.step()
 
-            if adj_list == None:
+            if adj_list is None:
                 train_err[i-1, :] = loss.detach().cpu().numpy()
             else:
                 train_err[i-1, :] = loss.detach().cpu().numpy().reshape((x_hat.size(0)))
@@ -328,7 +330,8 @@ def select_model(exp, x_n, epochs, lr, device):
                                                    exp['dropout'],
                                                    exp['adj'],
                                                    x_n_tensor,
-                                                   Delta=exp['Delta'])
+                                                   Delta=exp['Delta'],
+                                                   binary=exp['bin'])
             # arch = arch.cuda()
         else:
             raise Exception('Unkwown exp type')
