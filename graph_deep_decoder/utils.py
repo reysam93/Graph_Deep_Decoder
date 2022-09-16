@@ -11,6 +11,8 @@ from scipy.sparse.csgraph import dijkstra
 from scipy.io import loadmat
 from sklearn.cluster import AgglomerativeClustering
 
+import torch
+
 from graph_deep_decoder import datasets as ds
 from graph_deep_decoder.architecture import GraphDecoder
 
@@ -234,3 +236,13 @@ def create_filter(S, ps, x=None):
         H /= np.linalg.norm(H)
 
     return H
+
+
+def to_torch_sparse(sparse_mx):
+    """Convert a scipy sparse matrix to a torch sparse tensor."""
+    sparse_mx = sparse_mx.tocoo().astype(np.float32)
+    indices = torch.from_numpy(
+        np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
+    values = torch.from_numpy(sparse_mx.data)
+    shape = torch.Size(sparse_mx.shape)
+    return torch.sparse.FloatTensor(indices, values, shape)
