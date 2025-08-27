@@ -14,7 +14,7 @@ from graph_deep_decoder.architecture import (GFUps, GraphDecoder,
 from graph_deep_decoder.baselines import GCNN, GAT, KronAE, GUTF
 
 # For unrolling
-import GUN.models
+#import GUN.models
 
 # Optimizer constans
 SGD = 1
@@ -325,14 +325,15 @@ def select_model(exp, x_n, epochs, lr, device):
             # dec = GUTF(exp['fts'], exp['A'], exp['L'], exp['p'], exp['alpha'],
             #            x_n, device=device)
 
-            x_n_tensor = torch.Tensor(x_n).reshape((x_n.size, 1))
-            dec = getattr(GUN.models, exp['arch'])(1, exp['fts'], 1,
-                                                   exp['dropout'],
-                                                   exp['adj'],
-                                                   x_n_tensor,
-                                                   Delta=exp['Delta'],
-                                                   binary=exp['bin'])
-            # arch = arch.cuda()
+            raise Exception('Unrolling models not implemented.')
+        
+            # x_n_tensor = torch.Tensor(x_n).reshape((x_n.size, 1))
+            # dec = getattr(GUN.models, exp['arch'])(1, exp['fts'], 1,
+            #                                        exp['dropout'],
+            #                                        exp['adj'],
+            #                                        x_n_tensor,
+            #                                        Delta=exp['Delta'],
+            #                                        binary=exp['bin'])
         else:
             raise Exception('Unkwown exp type')
 
